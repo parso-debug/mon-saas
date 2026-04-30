@@ -1,0 +1,156 @@
+{
+  "theme": "hybrid_fullstack",
+  "archetypes": {
+    "saas_app": {
+      "id": "4",
+      "name": "Swiss & High-Contrast",
+      "rationale": "SaaS platform needs to feel authoritative, tech-savvy, and high-converting (Webflow/Framer inspiration). Uses stark contrasts and minimal decoration to let the builder UI shine."
+    },
+    "artisan_template": {
+      "id": "1",
+      "name": "Organic & Earthy",
+      "rationale": "The generated artisan websites must feel trustworthy, grounded, and premium. Earthy tones and classic typography build trust with local clients."
+    }
+  },
+  "typography": {
+    "saas_app": {
+      "headings": {
+        "fontFamily": "'Bricolage Grotesque', sans-serif",
+        "weights": ["700", "800"],
+        "tracking": "tracking-tight",
+        "usage": "Bold, expressive, tech-forward. Do not center unless absolutely necessary."
+      },
+      "body": {
+        "fontFamily": "'Geist', sans-serif",
+        "weights": ["400", "500"],
+        "tracking": "tracking-normal",
+        "usage": "Clean, highly readable technical body text."
+      },
+      "mono": {
+        "fontFamily": "'Space Mono', monospace",
+        "usage": "Used for overlines, labels, code snippets, and UI coordinates."
+      }
+    },
+    "artisan_template": {
+      "headings": {
+        "fontFamily": "'Instrument Serif', serif",
+        "weights": ["400"],
+        "tracking": "tracking-tight",
+        "usage": "High-end craftsmanship, editorial trust, and elegance."
+      },
+      "body": {
+        "fontFamily": "'Manrope', sans-serif",
+        "weights": ["400", "500"],
+        "tracking": "tracking-normal",
+        "usage": "Friendly, modern, easy to read for all demographics."
+      }
+    }
+  },
+  "colors": {
+    "saas_app": {
+      "background": "#FAFAFA",
+      "foreground": "#09090B",
+      "primary": "#F95A2C",
+      "primaryForeground": "#FFFFFF",
+      "secondary": "#111111",
+      "secondaryForeground": "#FAFAFA",
+      "muted": "#E4E4E7",
+      "mutedForeground": "#71717A",
+      "accent": "#002FA7",
+      "border": "#E4E4E7",
+      "ring": "#F95A2C",
+      "surfaceStrategy": "Neobrutalist lite: 1px crisp borders (border-black/10), flat or sharp shadows, no muddy gradients."
+    },
+    "artisan_template": {
+      "background": "#FDFBF7",
+      "foreground": "#1F2937",
+      "primary": "#1F3D2D",
+      "primaryForeground": "#FFFFFF",
+      "secondary": "#E5E1D8",
+      "secondaryForeground": "#1F2937",
+      "muted": "#F3F1EC",
+      "mutedForeground": "#6B7280",
+      "accent": "#C84B31",
+      "border": "#E5E1D8",
+      "ring": "#1F3D2D",
+      "surfaceStrategy": "Tactile and warm: no glassmorphism, soft earthy shadows, slight roundness (rounded-md)."
+    }
+  },
+  "spacing_and_layout": {
+    "marketing_page": {
+      "container": "max-w-7xl mx-auto px-6 md:px-12",
+      "section_spacing": "py-24 md:py-32",
+      "grid_mode": "Tetris (Bento Grid) with gap-8, mixing large dominant hero cards with smaller stat cards."
+    },
+    "dashboard_and_builder": {
+      "container": "w-full px-4 md:px-8",
+      "section_spacing": "py-8",
+      "grid_mode": "Control Room layout. Dense, gap-4 to gap-6. Use h-full to stretch children."
+    },
+    "artisan_template": {
+      "container": "max-w-6xl mx-auto px-4 md:px-8",
+      "section_spacing": "py-20 md:py-28",
+      "grid_mode": "Asymmetric storytelling. Overlapping images, generous breathing room (p-12 inside containers)."
+    }
+  },
+  "components": {
+    "buttons": {
+      "saas": "Crisp edges (rounded-none or rounded-sm), high contrast background, bold tracking, hover:-translate-y-0.5 transition-transform.",
+      "template": "Rounded (rounded-md), deep colors, soft hover shadow, elegant padding (px-8 py-3)."
+    },
+    "cards": {
+      "saas": "1px solid border (border-black/10), bg-white, sharp corners, optional crisp shadow.",
+      "template": "No borders, bg-[#F3F1EC], soft drop-shadow-sm, rounded-lg."
+    },
+    "navigation": {
+      "saas": "Crystal glassmorphism (backdrop-blur-xl bg-white/70) with 1px inner border. Absolute positioning z-50.",
+      "template": "Solid background (#FDFBF7) with subtle bottom border. High trust, clear contact info."
+    }
+  },
+  "motion_and_interactions": {
+    "global": "Respect prefers-reduced-motion. Use smooth, spring-based transitions for layout changes.",
+    "hover": "Always explicitly define hover:text and hover:bg for clarity.",
+    "ai_generation_page": "Use a kinetic/terminal retro-futurism aesthetic during the loading state (ASCII art, tracing beams, typing text) to make the wait feel magical but technical."
+  },
+  "media": {
+    "guidelines": "Main agent MUST strictly use these URLs. Never use generic placeholders like via.placeholder.com. Always add descriptive alt tags.",
+    "images": {
+      "saas_background": {
+        "url": "https://images.pexels.com/photos/2680270/pexels-photo-2680270.jpeg",
+        "description": "Smooth blue gradient with lines, used for SaaS marketing abstract hero background behind text."
+      },
+      "artisan_hero": {
+        "url": "https://images.pexels.com/photos/7492582/pexels-photo-7492582.jpeg",
+        "description": "Skilled carpenter working in rustic workshop. Hero image for the generated artisan template."
+      },
+      "artisan_service_1": {
+        "url": "https://images.pexels.com/photos/4756489/pexels-photo-4756489.jpeg",
+        "description": "Home under renovation. Used for Service 1 card in template."
+      },
+      "artisan_service_2": {
+        "url": "https://images.unsplash.com/photo-1769736436759-1c43688ef899?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzV8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBob21lJTIwcmVub3ZhdGlvbiUyMGludGVyaW9yfGVufDB8fHx8MTc3NzUwNzY5MXww&ixlib=rb-4.1.0&q=85",
+        "description": "Elegant renovated hallway. Used for Service 2 card in template."
+      },
+      "testimonial_portrait": {
+        "url": "https://images.pexels.com/photos/4981775/pexels-photo-4981775.jpeg",
+        "description": "Construction worker portrait. Used for testimonial avatar in the SaaS marketing page."
+      },
+      "dummy_logo": {
+        "url": "https://images.pexels.com/photos/7661185/pexels-photo-7661185.jpeg",
+        "description": "Minimalist 'Branding' graphic used as a placeholder logo for demo artisan sites."
+      }
+    }
+  },
+  "iconography": {
+    "library": "lucide-react",
+    "style": "Clean, thin stroke (1.5px or 2px), strictly matching the technical aesthetic of the SaaS and the elegant aesthetic of the template."
+  },
+  "instructions_to_main_agent": [
+    "Load both typography sets from Google Fonts in the main HTML/CSS.",
+    "Ensure the SAAS layout uses HTML/Tailwind for marketing, and heavily customized Shadcn for the Dashboard/Builder.",
+    "The generated Artisan template MUST be standard HTML/Tailwind without Shadcn components, prioritizing semantic markup and organic styling.",
+    "Apply data-testid to all interactive components as per the design rules.",
+    "Do NOT use pure #000000 or #FFFFFF for large sections without tinting or texture, except where explicitly defined in the palette.",
+    "When displaying the Artisan site preview inside the SaaS builder, embed it within an 'iframe' or a mocked scaling container to keep CSS scopes clean, or prefix the template classes thoroughly."
+  ]
+}
