@@ -747,6 +747,22 @@ async def submit_lead(slug: str, body: LeadIn):
     }
     await db.leads.insert_one(lead)
     lead.pop("_id", None)
+
+    # Notify the site owner by email (artisan contact email if set, else owner account email)
+    owner_email = site.get("email")
+    if not owner_email:
+        owner = await db.users.find_one({"id": site.get("user_id")}, {"_id": 0, "email": 1})
+        owner_email = owner.get("email") if owner else None
+    logger.info(f"Lead received for slug={slug}; owner_email={owner_email}")
+    if owner_email:
+        public_url = f"/site/{site['slug']}"
+        asyncio.create_task(send_lead_notification_email(
+            owner_email=owner_email,
+            business_name=site.get("business_name", "votre site"),
+            lead=lead,
+            public_url=public_url,
+        ))
+
     return {"ok": True, "id": lead["id"]}
 
 
@@ -831,8 +847,21 @@ async def _apply_pro_credit_if_paid(session_id: str) -> dict:
     if not STRIPE_API_KEY:
         return {"payment_status": txn.get("payment_status"), "status": txn.get("status"), "applied": txn.get("applied", False)}
 
-    stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url="")
-    status_resp = await stripe_checkout.get_checkout_status(session_id)
+    # Tolerate Stripe SDK errors (e.g. test-key sessions not retrievable, network issues)
+    try:
+        stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url="")
+        status_resp = await stripe_checkout.get_checkout_status(session_id)
+    except Exception as e:
+        logger.warning(f"Stripe status lookup failed for {session_id}: {e}")
+        return {
+            "payment_status": txn.get("payment_status", "pending"),
+            "status": txn.get("status", "open"),
+            "applied": txn.get("applied", False),
+            "amount": txn.get("amount"),
+            "currency": txn.get("currency"),
+            "package_id": txn.get("package_id"),
+            "lookup_error": True,
+        }
 
     update = {
         "payment_status": status_resp.payment_status,

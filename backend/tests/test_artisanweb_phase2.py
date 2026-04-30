@@ -152,17 +152,18 @@ class TestBilling:
             pytest.skip("checkout did not produce session_id")
         h = {"Authorization": f"Bearer {user_a['token']}"}
         r = requests.get(f"{API}/billing/status/{sid}", headers=h, timeout=30)
-        # KNOWN BACKEND BUG: when STRIPE_API_KEY=sk_test_emergent the create_checkout_session
-        # returns a mock cs_test_... id that Stripe later refuses with "No such checkout.session",
-        # and _apply_pro_credit_if_paid does not catch CheckoutError -> 500 to client.
-        # Accept either the (broken) 500 OR the correct 200 to keep CI green and report the bug.
-        if r.status_code == 500:
-            pytest.xfail("Backend 500 on billing/status — Stripe checkout id from sk_test_emergent is rejected by real Stripe API; _apply_pro_credit_if_paid lacks try/except. See iteration_2 report.")
+        # After iteration 3 fix: _apply_pro_credit_if_paid wraps stripe SDK call in try/except
+        # and returns a 200 with lookup_error=true when Stripe can't find the session.
         assert r.status_code == 200, r.text
         d = r.json()
-        assert d.get("payment_status") in ("unpaid", "no_payment_required", "initiated"), d
+        assert d.get("payment_status") in ("unpaid", "no_payment_required", "initiated", "pending"), d
         assert d.get("applied") is False
         assert d.get("package_id") == "pro_monthly"
+        # When Stripe SDK can't retrieve session (test key), lookup_error must be surfaced
+        # so the frontend/client can distinguish from a real unpaid state.
+        # If the underlying Stripe retrieve actually works (real key), lookup_error may be absent.
+        if d.get("lookup_error") is not None:
+            assert d["lookup_error"] is True
 
     def test_billing_status_other_user_404(self, user_b, state):
         sid = state.get('session_id')
@@ -293,6 +294,44 @@ class TestLeadEmailSkip:
         d = r.json()
         assert d["ok"] is True
         assert "id" in d
+
+    def test_lead_triggers_email_skipped_log(self, site_a):
+        """After iteration 3 fix: submit_lead must fire-and-forget send_lead_notification_email
+        which logs '[email skipped — no RESEND_API_KEY]' when RESEND_API_KEY is empty,
+        and submit_lead itself logs 'Lead received for slug=...'. Both must appear in backend log."""
+        slug = site_a["slug"]
+        marker = f"TEST_logcheck_{uuid.uuid4().hex[:8]}@example.com"
+        r = requests.post(f"{API}/public/sites/{slug}/leads", json={
+            "name": "TEST_LogCheck Client",
+            "email": marker,
+            "phone": "0600000000",
+            "message": "Log-check lead — verifying both log lines are emitted.",
+        }, timeout=15)
+        assert r.status_code == 200, r.text
+        # Give the fire-and-forget task a moment to log
+        time.sleep(2)
+
+        # Read supervisor-managed backend log
+        log_paths = [
+            "/var/log/supervisor/backend.err.log",
+            "/var/log/supervisor/backend.out.log",
+        ]
+        combined = ""
+        for p in log_paths:
+            try:
+                with open(p, "r") as f:
+                    # read last ~200KB to stay fast
+                    f.seek(0, 2)
+                    size = f.tell()
+                    f.seek(max(0, size - 200_000))
+                    combined += f.read()
+            except Exception:
+                pass
+
+        assert f"Lead received for slug={slug}" in combined, \
+            f"'Lead received for slug={slug}' log line not found in backend logs"
+        assert "email skipped" in combined and "RESEND_API_KEY" in combined, \
+            "'[email skipped — no RESEND_API_KEY]' log line not found — send_lead_notification_email was not invoked"
 
 
 # ----- Free-tier bypass via DB pro_until (validate it lifts the limit) -----

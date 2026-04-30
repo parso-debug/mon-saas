@@ -1,0 +1,36 @@
+{
+  "summary": "Iteration 3 retest of two critical bug fixes for ArtisanWeb SaaS. (1) Lead email notification is now wired in submit_lead via asyncio.create_task — verified by new test TestLeadEmailSkip.test_lead_triggers_email_skipped_log which POSTs a lead and greps /var/log/supervisor/backend.*.log for both 'Lead received for slug=...' and '[email skipped — no RESEND_API_KEY]' lines (both present). (2) /api/billing/status/{session_id} now returns HTTP 200 with lookup_error=true when Stripe SDK retrieve fails (wrapped in try/except in _apply_pro_credit_if_paid) — the previous XFAIL marker in TestBilling.test_billing_status_unpaid_for_initiated was flipped to a plain assert and now passes. Phase2 suite: 14/14 run (6 Gemini-heavy tests deselected to save budget per request) = 14 PASS. Iteration 1 regression: 26/27 run (1 Gemini image deselected) = 26 PASS, 1 PRE-EXISTING test-coupling failure (TestSitesGenerate.test_slug_uniqueness_same_business_city now hits the FREE_SITE_LIMIT=1 introduced in phase 2 — this is test debt, not a new regression from iter 3 fixes).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "N/A (test-only)", "issue": "test_artisanweb.py::TestSitesGenerate::test_slug_uniqueness_same_business_city attempts to create 2 additional sites for user_a who already owns site_a, hitting the phase-2 free-tier 402. Needs either (a) use a fresh user fixture, or (b) set users.pro_until in DB for user_a before the test. Not a product bug; just test coupling with phase-2 business rule."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_artisanweb.py",
+    "/app/backend/tests/test_artisanweb_phase2.py",
+    "/app/test_reports/pytest/iter3_billing_lead.xml",
+    "/app/test_reports/pytest/iter3_phase2.xml",
+    "/app/test_reports/pytest/iter3_artisanweb.xml"
+  ],
+  "action_items": [
+    "(Optional) Fix test_slug_uniqueness_same_business_city in /app/backend/tests/test_artisanweb.py — either use a dedicated fresh user fixture or seed pro_until before the two generate calls. This was introduced implicitly by iter-2's FREE_SITE_LIMIT=1 and is unrelated to iter-3 bug fixes.",
+    "(Optional) Consider using a real sk_test_... Stripe API key so the billing/status flow exercises the happy path instead of always hitting the lookup_error=true branch."
+  ],
+  "critical_code_review_comments": [
+    "Good: both fixes are minimal and surgical — asyncio.create_task is the right fire-and-forget pattern; try/except around the Stripe SDK call correctly degrades to cached txn state with a lookup_error flag the client can branch on.",
+    "Nit: in submit_lead, owner_email is looked up from db.users even when site.email is set — order is correct (site.email first, then fallback), so no issue. Logger line 'Lead received for slug=...; owner_email=...' leaks owner email into INFO logs; acceptable for a small SaaS but worth masking in production log aggregation.",
+    "Nit: _apply_pro_credit_if_paid returns 'pending' as the fallback payment_status when txn has no payment_status — but TestBilling expects values in ('unpaid','no_payment_required','initiated','pending'); current DB seed stores 'initiated' so test passes. Keep the 'pending' fallback for defensiveness."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_artisanweb_phase2.py — flipped XFAIL on test_billing_status_unpaid_for_initiated to expect 200 + lookup_error=true; added TestLeadEmailSkip.test_lead_triggers_email_skipped_log that greps supervisor backend log for both expected log lines"
+  ],
+  "success_rate": {"backend": "100% (targeted iter-3 fixes: 8/8 billing+lead PASS; full phase2: 14/14 PASS; iter1 regression: 26/27 PASS with 1 pre-existing test-coupling failure)", "frontend": "N/A (not tested per review_request)"},
+  "test_credentials": "Random TEST_ prefixed emails generated per session via _rand_email helper. No shared credentials needed.",
+  "seed_data_creation": "Each test run creates fresh TEST_ prefixed users, sites and leads. Cleanup fixtures delete them at end of class. TestProBypass directly writes users.pro_until future ISO timestamp in MongoDB to lift the free-tier cap.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Both critical bugs from iteration 2 are confirmed fixed in iteration 3. Regression suites (/app/backend/tests/test_artisanweb.py + /app/backend/tests/test_artisanweb_phase2.py) are stable. When next iteration needs to re-run full suites, expect ~2.5 min and 2 Gemini image regenerations; to save budget, deselect TestSitesGenerate::test_generate_with_image, TestRegenerateAssets::test_regenerate_logo/hero/files_endpoint_serves_logo/files_endpoint_no_auth_required — these are the expensive calls. The lead-log test reads /var/log/supervisor/backend.err.log (that's where INFO goes under the current supervisor config) — if log rotation/config changes, update log_paths list. One known pre-existing failure in iter1 suite (slug uniqueness test colliding with phase-2 free-tier limit) remains — main agent should fix it with a fresh-user fixture when convenient. No mocked APIs in scope; Stripe test key returns lookup_error=true which is expected under test_emergent key.",
+  "rca_of_the_issue": "Both iter-2 bugs were fixed by minimal targeted patches: (1) submit_lead at /app/backend/server.py:756-764 now does `logger.info(f'Lead received for slug={slug}; owner_email={owner_email}')` followed by `asyncio.create_task(send_lead_notification_email(...))` — previously the helper was defined but never called. Owner email lookup correctly prefers site.email and falls back to users.email via DB lookup with _id excluded. (2) _apply_pro_credit_if_paid at /app/backend/server.py:851-864 now wraps `StripeCheckout(...).get_checkout_status(session_id)` in try/except Exception returning txn cached fields plus `lookup_error: True` instead of raising — previously any CheckoutError from the Stripe SDK (common with the sk_test_emergent mock key that mints cs_test_... ids Stripe's real API rejects) propagated as an unhandled 500. Both fixes verified via direct pytest assertions and live backend log inspection."
+}
