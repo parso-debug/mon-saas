@@ -12,6 +12,9 @@ import Onboarding from "@/pages/Onboarding";
 import Generating from "@/pages/Generating";
 import Builder from "@/pages/Builder";
 import PublicSite from "@/pages/PublicSite";
+import Billing from "@/pages/Billing";
+import BillingSuccess from "@/pages/BillingSuccess";
+import BillingCancel from "@/pages/BillingCancel";
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
@@ -33,6 +36,9 @@ export default function App() {
           <Route path="/onboarding" element={<Protected><Onboarding /></Protected>} />
           <Route path="/generating" element={<Protected><Generating /></Protected>} />
           <Route path="/builder/:siteId" element={<Protected><Builder /></Protected>} />
+          <Route path="/billing" element={<Protected><Billing /></Protected>} />
+          <Route path="/billing/success" element={<Protected><BillingSuccess /></Protected>} />
+          <Route path="/billing/cancel" element={<Protected><BillingCancel /></Protected>} />
           <Route path="/site/:slug" element={<PublicSite />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>

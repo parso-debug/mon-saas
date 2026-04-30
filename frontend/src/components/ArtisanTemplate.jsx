@@ -1,6 +1,7 @@
 import { useState } from "react";
 import * as Lucide from "lucide-react";
 import { Phone, Mail, MapPin, Send, Check, Star } from "lucide-react";
+import { resolveImg } from "@/lib/api";
 
 const Icon = ({ name, className }) => {
   // Convert kebab-case to PascalCase for lucide-react
@@ -48,7 +49,7 @@ export default function ArtisanTemplate({ site, onSubmitLead, editable = false, 
     );
   };
 
-  const heroImage = site.hero_image_url || "https://images.pexels.com/photos/7492582/pexels-photo-7492582.jpeg";
+  const heroImage = resolveImg(site.hero_image_url) || "https://images.pexels.com/photos/7492582/pexels-photo-7492582.jpeg";
   const service1Img = "https://images.pexels.com/photos/4756489/pexels-photo-4756489.jpeg";
   const service2Img = "https://images.unsplash.com/photo-1769736436759-1c43688ef899?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzV8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBob21lJTIwcmVub3ZhdGlvbiUyMGludGVyaW9yfGVufDB8fHx8MTc3NzUwNzY5MXww&ixlib=rb-4.1.0&q=85";
 
@@ -58,9 +59,13 @@ export default function ArtisanTemplate({ site, onSubmitLead, editable = false, 
       <header className="border-b border-[#E5E1D8] bg-[#FDFBF7] sticky top-0 z-30">
         <div className="max-w-6xl mx-auto px-4 md:px-8 h-16 md:h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-[#1F3D2D] flex items-center justify-center">
-              <span className="text-[#FDFBF7] font-serif-instrument italic text-lg">{site.business_name?.charAt(0) || "A"}</span>
-            </div>
+            {site.logo_url ? (
+              <img src={resolveImg(site.logo_url)} alt={`${site.business_name} logo`} className="w-11 h-11 object-contain bg-white rounded-md border border-[#E5E1D8]" />
+            ) : (
+              <div className="w-9 h-9 bg-[#1F3D2D] flex items-center justify-center">
+                <span className="text-[#FDFBF7] font-serif-instrument italic text-lg">{site.business_name?.charAt(0) || "A"}</span>
+              </div>
+            )}
             <div>
               <div className="font-serif-instrument italic text-lg leading-none">{site.business_name}</div>
               <div className="font-manrope text-[10px] uppercase tracking-[0.2em] text-[#6B7280] mt-0.5">{site.business_type} · {site.city}</div>
@@ -212,6 +217,17 @@ export default function ArtisanTemplate({ site, onSubmitLead, editable = false, 
                 <span>{site.city} et alentours</span>
               </li>
             </ul>
+
+            {site.show_map && (
+              <div className="mt-6 rounded-lg overflow-hidden border border-[#E5E1D8] aspect-video" data-testid="google-map">
+                <iframe
+                  title="Carte"
+                  src={`https://www.google.com/maps?q=${encodeURIComponent(site.map_address || `${site.business_name} ${site.city}`)}&output=embed`}
+                  width="100%" height="100%" style={{ border: 0 }} loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                ></iframe>
+              </div>
+            )}
           </div>
           <div className="md:col-span-7">
             <form onSubmit={handleSubmit} className="bg-[#F3F1EC] p-8 md:p-10 rounded-lg space-y-5" data-testid="contact-form">

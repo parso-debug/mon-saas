@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import api from "@/lib/api";
+import api, { resolveImg } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Plus, ExternalLink, Trash2, MessageSquare, LogOut, Globe, Loader2 } from "lucide-react";
+import { Plus, ExternalLink, Trash2, MessageSquare, LogOut, Globe, Loader2, Crown, Sparkles } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
@@ -16,12 +16,15 @@ export default function Dashboard() {
   const nav = useNavigate();
   const [sites, setSites] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [billing, setBilling] = useState(null);
 
   const load = async () => {
     setLoading(true);
     try {
       const r = await api.get("/sites");
       setSites(r.data);
+      const b = await api.get("/billing/me");
+      setBilling(b.data);
     } catch (e) {
       toast.error("Impossible de charger les sites");
     } finally {
@@ -64,6 +67,33 @@ export default function Dashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-6 md:px-8 py-12">
+        {/* Plan banner */}
+        {billing && (
+          billing.plan === "pro" ? (
+            <div className="mb-8 bg-[#09090B] text-white px-5 py-3 flex items-center gap-3" data-testid="plan-banner-pro">
+              <Crown className="w-4 h-4 text-[#F95A2C]" />
+              <div className="text-sm flex-1">
+                <span className="font-display font-bold mr-2">Plan Pro actif</span>
+                <span className="text-[#A1A1AA] text-xs">jusqu'au {new Date(billing.pro_until).toLocaleDateString("fr-FR")}</span>
+              </div>
+              <Link to="/billing" className="text-xs underline underline-offset-4 hover:text-[#F95A2C]">Gérer</Link>
+            </div>
+          ) : (
+            <div className="mb-8 bg-white border border-black/10 px-5 py-4 flex flex-wrap items-center gap-3" data-testid="plan-banner-free">
+              <div className="font-mono-grotesk text-[10px] uppercase tracking-[0.2em] text-[#71717A]">// plan free</div>
+              <div className="text-sm flex-1">
+                <span className="font-display font-bold mr-1">{sites.length}/{billing.site_limit} site{billing.site_limit > 1 ? "s" : ""}</span>
+                <span className="text-[#52525B]">— passez à Pro pour des sites illimités, le domaine custom et les images IA.</span>
+              </div>
+              <Link to="/billing">
+                <Button size="sm" className="rounded-none bg-[#F95A2C] hover:bg-[#09090B] text-white" data-testid="upgrade-pro-btn">
+                  <Sparkles className="w-3.5 h-3.5 mr-2" /> Passer à Pro
+                </Button>
+              </Link>
+            </div>
+          )
+        )}
+
         <div className="grid md:grid-cols-12 gap-8 items-end mb-12">
           <div className="md:col-span-8">
             <div className="font-mono-grotesk text-[10px] uppercase tracking-[0.2em] text-[#71717A] mb-3">// vos sites</div>
@@ -100,7 +130,7 @@ export default function Dashboard() {
               <div key={s.id} className="border border-black/10 bg-white overflow-hidden group" data-testid={`site-card-${s.id}`}>
                 <div className="aspect-video bg-[#FAFAFA] relative overflow-hidden border-b border-black/10">
                   {s.hero_image_url ? (
-                    <img src={s.hero_image_url} alt={s.business_name} className="w-full h-full object-cover" />
+                    <img src={resolveImg(s.hero_image_url)} alt={s.business_name} className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-[#71717A]">
                       <Globe className="w-10 h-10" />

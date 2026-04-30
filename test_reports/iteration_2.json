@@ -1,0 +1,65 @@
+{
+  "summary": "Phase 2 (P0/P1/P2) backend testing for ArtisanWeb. Wrote /app/backend/tests/test_artisanweb_phase2.py — 19 tests covering: regenerate-logo, regenerate-hero (real Gemini, ~30s each), object storage proxy /api/files/{path} (200 + 404 + no-auth), /api/billing/me (free plan + 401), /api/billing/checkout (success + invalid package 400), /api/billing/status (200/xfail/404 for other user), free-tier 402 enforcement with French 'Pro' message, custom_domain/show_map/map_address persistence, lead public submission (RESEND_API_KEY empty silent-skip path), Pro bypass via DB pro_until grant, multi-tenant isolation on regenerate-logo/hero/billing-status. Result: 18 PASS + 1 XFAIL (documents the /api/billing/status 500 bug). Iteration 1 regression suite (28 tests) still passes.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/public/sites/{slug}/leads",
+        "issue": "P0 lead-email notification (Resend) is NOT WIRED. send_lead_notification_email is defined at server.py:516 but NEVER called from submit_lead (line 734-750). Therefore: (a) no notification email is ever sent to the artisan even when RESEND_API_KEY is set, and (b) the '[email skipped — no RESEND_API_KEY]' log line never appears (verified via grep on supervisor logs). Lead doc IS saved correctly, so DB persistence works, but the P0 feature is missing its trigger call.",
+        "priority": "CRITICAL"
+      },
+      {
+        "endpoint": "GET /api/billing/status/{session_id}",
+        "issue": "Returns 500 Internal Server Error when polling a freshly-created checkout session. _apply_pro_credit_if_paid (server.py:835) calls stripe_checkout.get_checkout_status(session_id) which raises CheckoutError 'No such checkout.session: cs_test_...' because the session_id returned by create_checkout_session under STRIPE_API_KEY=sk_test_emergent is not retrievable from the real Stripe API. No try/except wraps this call — it propagates as an uncaught 500 to the client. Reproduction: POST /api/billing/checkout body={package_id:'pro_monthly', origin_url:<host>} -> get session_id -> immediately GET /api/billing/status/{session_id} -> 500. Mitigation: wrap get_checkout_status in try/except returning {payment_status:'unknown', applied:false, error:'stripe_lookup_failed'} OR upgrade STRIPE_API_KEY to a real test secret that supports retrieve.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "POST /api/sites/{id}/regenerate-hero, regenerate-logo",
+        "issue": "When Gemini fails (e.g. quota), endpoint returns 502 'La génération a échoué' which is correct. Otherwise object-storage URL pattern is correct (/api/files/artisanweb/{logo|hero}/{user_id}/{uuid}.jpg)."
+      },
+      {
+        "endpoint": "GET /api/files/{path}",
+        "issue": "Public, no auth required (intentional). 404 for unknown paths works. Content-Type is correctly preserved (image/jpeg observed). Cache-Control: public, max-age=31536000, immutable — good."
+      },
+      {
+        "endpoint": "/api/billing/checkout",
+        "issue": "metadata.days is stringified ('30'/'365') — fine for Stripe constraints, just noting that _apply_pro_credit_if_paid casts back via int(...)."
+      }
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_artisanweb_phase2.py",
+    "/app/backend/tests/test_artisanweb.py",
+    "/app/test_reports/pytest/phase2_results.xml"
+  ],
+  "action_items": [
+    "WIRE send_lead_notification_email INTO submit_lead. After db.leads.insert_one(lead), use asyncio.create_task to fire-and-forget: public_url = f\"{origin}/site/{slug}\" (or use a config base url); owner_email = (await db.users.find_one({'id': site['user_id']}, {'email':1}))['email']. Without this, the entire P0 lead-email feature is dead code.",
+    "FIX /api/billing/status 500: wrap stripe_checkout.get_checkout_status in try/except CheckoutError in _apply_pro_credit_if_paid; on failure, return cached txn fields with payment_status='pending' or 'unknown' instead of raising. Also consider using sk_test_... real Stripe test key so retrieve actually works.",
+    "Optional: surface generation_method (claude|fallback) and image_generation_failed flags in /api/sites/generate response to help frontend detect AI degraded mode (carry-over from iteration 1).",
+    "Optional: Update /app/memory/test_credentials.md to mention pytest test_artisanweb_phase2.py invocation."
+  ],
+  "critical_code_review_comments": [
+    "server.py L516 send_lead_notification_email is defined but never invoked → P0 feature broken. Either remove the dead helper or hook it into submit_lead.",
+    "server.py L835 (_apply_pro_credit_if_paid) — no exception handling around external Stripe call. Always wrap third-party SDK calls in try/except and translate to 502/503 with structured detail; never let SDK exceptions bubble as 500.",
+    "server.py L607 free-tier check uses count_documents(user_id) — correct. But when delete_site is called, the count drops, so a Free user can keep recreating sites (acceptable for MVP, not enforced as 'first-site forever').",
+    "server.py L777 PACKAGES dict only allows pro_monthly/pro_yearly — good (server-side authoritative pricing, no client-amount injection).",
+    "server.py upload_image_bytes correctly tracks file metadata in db.files (storage_path, content_type, owner_id, kind, is_deleted). Good for future GDPR / soft delete.",
+    "server.py /api/files/{file_path:path} uses path:path FastAPI converter so slashes work (verified). Good. But there's no ownership check — any authenticated or unauthenticated client who knows a file path can fetch it. This is intentional for hero/logo to be embeddable in public sites; just be aware logos/hero contain no PII so it's acceptable.",
+    "server.py L922 startup hook does asyncio.to_thread(_init_storage_sync) — good. But subsequent _init_storage_sync calls reuse a module-level _storage_key; if the key expires there is no refresh logic.",
+    "test mode: STRIPE_API_KEY=sk_test_emergent appears to be a placeholder that the emergentintegrations library treats specially for create_checkout_session but real Stripe rejects on retrieve. Document this clearly in /app/backend/.env or replace with a real Stripe test key for end-to-end status polling tests."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_artisanweb_phase2.py",
+    "/app/test_reports/iteration_2.json",
+    "/app/test_reports/pytest/phase2_results.xml"
+  ],
+  "success_rate": {"backend": "94.7% (18/19 PASS, 1 XFAIL — documents real bug)", "frontend": "n/a (skipped per request)"},
+  "test_credentials": "Dynamically generated TEST_ph2a_<uuid>@artisanweb.fr / testpass123 (per spec in /app/memory/test_credentials.md)",
+  "seed_data_creation": "Suite creates 2 users + 2-3 sites + 1 payment_transactions row + 1 lead. TestZCleanup deletes all sites at end. Users + payment_transactions + db.files objects remain (intentional for audit trail). One pro_until is granted to user_a in DB to verify Pro bypass.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Two regression suites exist now: /app/backend/tests/test_artisanweb.py (28 baseline tests) and /app/backend/tests/test_artisanweb_phase2.py (19 P0/P1/P2 tests). Combined run ~2.5 minutes due to 2× Gemini image generations. After the lead-email and billing/status fixes land: (1) flip XFAIL marker in TestBilling.test_billing_status_unpaid_for_initiated to plain assert, (2) add a test that posts a lead and asserts backend logs contain '[email skipped — no RESEND_API_KEY]' (or that the function was called via a mock). To grant Pro for testing without going through Stripe, directly set users.pro_until = ISO future timestamp in MongoDB (DB_NAME=test_database). PACKAGES days are stored as strings in metadata and cast to int in _apply_pro_credit_if_paid.",
+  "rca of the issue": "Bug 1 (lead email not sent): root cause is missing call site — send_lead_notification_email is implemented but submit_lead never invokes it. Reproduction: (a) POST /api/auth/register; (b) POST /api/sites/generate; (c) POST /api/public/sites/{slug}/leads with valid body; (d) grep '/var/log/supervisor/backend.*.log' for 'email skipped' or 'Lead notification' → 0 hits. Fix: add `asyncio.create_task(send_lead_notification_email(owner_email, site['business_name'], lead, public_url))` after db.leads.insert_one in submit_lead, fetching owner email by site['user_id'] from db.users. Bug 2 (billing/status 500): Stripe SDK CheckoutError is unhandled. Reproduction: (a) POST /api/billing/checkout {package_id:'pro_monthly', origin_url:<host>}; (b) GET /api/billing/status/{session_id} immediately → 500 with stack trace 'No such checkout.session'. Mitigation: try/except CheckoutError in _apply_pro_credit_if_paid that returns cached txn fields with payment_status='pending'."
+}
