@@ -1,0 +1,41 @@
+{
+  "summary": "Backend-only testing for ArtisanWeb SaaS. Wrote pytest suite with 28 tests covering health, auth (register/login/me + 401/400 cases), site generation with Claude (no-image fast path + 1 real Gemini image), sites CRUD, publish, public site (no auth + user_id stripped), lead submission, owner-only leads listing, multi-tenant isolation (user B blocked from get/update/publish/delete/leads of user A), slug uniqueness on duplicate business+city, and delete cascades to leads. ALL 28 TESTS PASSED in ~78s.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/sites/{id}", "issue": "Other-user access returns 404 (intentional info-hiding) — acceptable but consider 403 for clarity in API docs."},
+      {"endpoint": "/api/auth/register", "issue": "No password complexity rules beyond min_length=6; OK for MVP but flag for production."},
+      {"endpoint": "/api/sites/generate", "issue": "When generate_image=true and Gemini fails, hero_image_url silently becomes null with no warning to client. Consider returning a flag like image_generation_failed."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_artisanweb.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py: load_dotenv path is fine, but JWT_SECRET defaults to 'dev-secret' — ensure prod env always sets it (currently set in .env).",
+    "server.py update_site: SiteUpdate.model_dump() with v is not None correctly skips unset fields; good. But content is replaced wholesale (no deep-merge) — main agent may want partial-merge for content fields if frontend sends partial content.",
+    "server.py generate_site: AI failures fall back to _fallback_content silently. Add logging visibility or a `generation_method` field (claude|fallback) to help debug in production.",
+    "server.py: Gemini image returned as base64 data URL inline in the document; large payloads stored in MongoDB will inflate document size and slow list/get queries. Consider storing under /uploads or external object storage and returning a URL.",
+    "server.py public_site: pops user_id but the document still contains internal fields like 'status' (visible) — fine for MVP. No leak of password_hash since it's a different collection.",
+    "Auth: bcrypt + JWT 30-day expiry — acceptable for MVP. No refresh token, no logout/blacklist — known MVP scope."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_artisanweb.py",
+    "/app/memory/test_credentials.md",
+    "/app/test_reports/iteration_1.json"
+  ],
+  "success_rate": {"backend": "100% (28/28)", "frontend": "n/a (skipped per request)"},
+  "test_credentials": "Dynamically generated per run with TEST_ prefix; password testpass123",
+  "seed_data_creation": "Suite creates 2 users + up to 3 sites and cleans them up at the end (TestZDelete). No leftover data expected.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Pytest suite at /app/backend/tests/test_artisanweb.py is the regression set. Run with REACT_APP_BACKEND_URL exported from /app/frontend/.env. Tests are session-scoped to avoid hammering Claude/Gemini; only ONE Claude call (TestSitesGenerate.test_generate_site_no_image) + ONE Gemini call (test_generate_with_image) + slug uniqueness creates 2 more no-image sites (Claude only). Total ~75-90s including real LLM. Frontend was not tested (per request). For frontend testing later, the public site at /api/public/sites/{slug} returns full content payload ready for SSR or React rendering.",
+  "rca of the issue": "No issues found. All endpoints behave per spec including French content (ville présente dans hero_title/hero_subtitle/seo_description), slug uniqueness collision-handling via incrementing suffix, cascade delete of leads on site deletion, and JWT-based isolation."
+}

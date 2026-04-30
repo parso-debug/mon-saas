@@ -1,0 +1,151 @@
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import api from "@/lib/api";
+import { useAuth } from "@/lib/auth";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import { Plus, ExternalLink, Trash2, MessageSquare, LogOut, Globe, Loader2 } from "lucide-react";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
+  AlertDialogTitle, AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+
+export default function Dashboard() {
+  const { user, logout } = useAuth();
+  const nav = useNavigate();
+  const [sites, setSites] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const r = await api.get("/sites");
+      setSites(r.data);
+    } catch (e) {
+      toast.error("Impossible de charger les sites");
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { load(); }, []);
+
+  const onDelete = async (id) => {
+    try {
+      await api.delete(`/sites/${id}`);
+      toast.success("Site supprimé");
+      load();
+    } catch (e) {
+      toast.error("Erreur de suppression");
+    }
+  };
+
+  const publicUrl = (slug) => `${window.location.origin}/site/${slug}`;
+
+  return (
+    <div className="min-h-screen bg-[#FAFAFA]" data-testid="dashboard-page">
+      {/* Top bar */}
+      <header className="border-b border-black/10 bg-white sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-6 md:px-8 h-16 flex items-center justify-between">
+          <Link to="/dashboard" className="flex items-center gap-2" data-testid="dashboard-logo">
+            <div className="w-7 h-7 bg-[#09090B] flex items-center justify-center">
+              <span className="text-[#F95A2C] font-mono-grotesk font-bold text-sm">A</span>
+            </div>
+            <span className="font-display font-bold text-sm tracking-tight">artisanweb</span>
+            <span className="font-mono-grotesk text-[10px] uppercase tracking-[0.2em] text-[#71717A] ml-2 hidden sm:inline">/ console</span>
+          </Link>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-[#52525B] hidden sm:block">{user?.full_name}</span>
+            <Button variant="ghost" size="sm" onClick={() => { logout(); nav("/"); }} data-testid="dashboard-logout" className="rounded-none">
+              <LogOut className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-6 md:px-8 py-12">
+        <div className="grid md:grid-cols-12 gap-8 items-end mb-12">
+          <div className="md:col-span-8">
+            <div className="font-mono-grotesk text-[10px] uppercase tracking-[0.2em] text-[#71717A] mb-3">// vos sites</div>
+            <h1 className="font-display font-bold text-4xl md:text-5xl tracking-tight">
+              Bonjour {user?.full_name?.split(' ')[0]} 👋
+            </h1>
+            <p className="text-[#52525B] mt-2">Gérez les sites internet générés pour vos activités.</p>
+          </div>
+          <div className="md:col-span-4 md:flex md:justify-end">
+            <Button onClick={() => nav("/onboarding")} data-testid="create-site-btn" className="rounded-none h-12 px-6 bg-[#09090B] hover:bg-[#F95A2C] text-white">
+              <Plus className="w-4 h-4 mr-2" /> Créer un nouveau site
+            </Button>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-20 text-[#71717A]">
+            <Loader2 className="w-5 h-5 animate-spin mr-2" /> Chargement...
+          </div>
+        ) : sites.length === 0 ? (
+          <div className="border border-black/10 bg-white p-16 text-center" data-testid="empty-sites">
+            <div className="w-16 h-16 bg-[#FAFAFA] border border-black/10 mx-auto mb-6 flex items-center justify-center">
+              <Globe className="w-7 h-7 text-[#F95A2C]" />
+            </div>
+            <h2 className="font-display font-bold text-2xl tracking-tight mb-2">Aucun site pour le moment.</h2>
+            <p className="text-[#52525B] mb-8">Créez votre premier site en moins de 5 minutes.</p>
+            <Button onClick={() => nav("/onboarding")} data-testid="empty-create-btn" className="rounded-none h-12 px-6 bg-[#09090B] hover:bg-[#F95A2C] text-white">
+              <Plus className="w-4 h-4 mr-2" /> Créer mon premier site
+            </Button>
+          </div>
+        ) : (
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {sites.map((s) => (
+              <div key={s.id} className="border border-black/10 bg-white overflow-hidden group" data-testid={`site-card-${s.id}`}>
+                <div className="aspect-video bg-[#FAFAFA] relative overflow-hidden border-b border-black/10">
+                  {s.hero_image_url ? (
+                    <img src={s.hero_image_url} alt={s.business_name} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-[#71717A]">
+                      <Globe className="w-10 h-10" />
+                    </div>
+                  )}
+                  <div className="absolute top-3 left-3 font-mono-grotesk text-[10px] uppercase tracking-[0.2em] bg-white/90 backdrop-blur px-2 py-1">
+                    {s.status === "published" ? <span className="text-[#F95A2C]">● live</span> : <span className="text-[#71717A]">● draft</span>}
+                  </div>
+                </div>
+                <div className="p-5">
+                  <h3 className="font-display font-bold text-lg tracking-tight truncate">{s.business_name}</h3>
+                  <p className="font-mono-grotesk text-[10px] uppercase tracking-[0.2em] text-[#71717A] mt-1">{s.business_type} · {s.city}</p>
+                  <div className="grid grid-cols-3 gap-2 mt-4">
+                    <Button size="sm" variant="outline" onClick={() => nav(`/builder/${s.id}`)} data-testid={`open-builder-${s.id}`} className="rounded-none border-black/20 hover:bg-[#09090B] hover:text-white">
+                      Éditer
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => window.open(publicUrl(s.slug), "_blank")} data-testid={`view-public-${s.id}`} className="rounded-none border-black/20 hover:bg-[#09090B] hover:text-white">
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button size="sm" variant="outline" data-testid={`delete-${s.id}`} className="rounded-none border-black/20 hover:bg-red-600 hover:text-white hover:border-red-600">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Supprimer ce site ?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Cette action est définitive. Tous les leads associés seront aussi supprimés.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Annuler</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => onDelete(s.id)} className="bg-red-600 hover:bg-red-700">Supprimer</AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
