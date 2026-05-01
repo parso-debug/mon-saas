@@ -15,6 +15,7 @@ import PublicSite from "@/pages/PublicSite";
 import Billing from "@/pages/Billing";
 import BillingSuccess from "@/pages/BillingSuccess";
 import BillingCancel from "@/pages/BillingCancel";
+import Admin from "@/pages/Admin";
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
@@ -39,6 +40,7 @@ export default function App() {
           <Route path="/billing" element={<Protected><Billing /></Protected>} />
           <Route path="/billing/success" element={<Protected><BillingSuccess /></Protected>} />
           <Route path="/billing/cancel" element={<Protected><BillingCancel /></Protected>} />
+          <Route path="/admin" element={<Protected><Admin /></Protected>} />
           <Route path="/site/:slug" element={<PublicSite />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>

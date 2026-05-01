@@ -58,6 +58,13 @@ export default function Dashboard() {
             <span className="font-mono-grotesk text-[10px] uppercase tracking-[0.2em] text-[#71717A] ml-2 hidden sm:inline">/ console</span>
           </Link>
           <div className="flex items-center gap-3">
+            {user?.is_admin && (
+              <Link to="/admin" data-testid="admin-link">
+                <Button variant="outline" size="sm" className="rounded-none border-[#F95A2C] text-[#F95A2C] hover:bg-[#F95A2C] hover:text-white">
+                  <Sparkles className="w-3.5 h-3.5 mr-2" /> Admin
+                </Button>
+              </Link>
+            )}
             <span className="text-sm text-[#52525B] hidden sm:block">{user?.full_name}</span>
             <Button variant="ghost" size="sm" onClick={() => { logout(); nav("/"); }} data-testid="dashboard-logout" className="rounded-none">
               <LogOut className="w-4 h-4" />

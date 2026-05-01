@@ -48,6 +48,11 @@ if RESEND_API_KEY:
 
 STRIPE_API_KEY = os.environ.get('STRIPE_API_KEY', '')
 
+# Admin bootstrap: comma-separated list of emails auto-promoted to admin
+ADMIN_EMAILS = {
+    e.strip().lower() for e in os.environ.get('ADMIN_EMAILS', '').split(',') if e.strip()
+}
+
 # ----- Object Storage -----
 STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
 APP_NAME = "artisanweb"
@@ -299,6 +304,29 @@ async def current_user(creds: Optional[HTTPAuthorizationCredentials] = Depends(s
     user = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
     if not user:
         raise HTTPException(status_code=401, detail="Utilisateur introuvable")
+    user = await _ensure_admin_flag(user)
+    return user
+
+
+async def _ensure_admin_flag(user: dict) -> dict:
+    """Idempotent: if user's email is in ADMIN_EMAILS, ensure is_admin=True in DB."""
+    if not user:
+        return user
+    email = (user.get("email") or "").lower()
+    should_be_admin = email in ADMIN_EMAILS
+    is_admin_now = bool(user.get("is_admin"))
+    if should_be_admin and not is_admin_now:
+        await db.users.update_one({"id": user["id"]}, {"$set": {"is_admin": True}})
+        user["is_admin"] = True
+        logger.info(f"Promoted {email} to admin via ADMIN_EMAILS bootstrap")
+    elif not is_admin_now:
+        user["is_admin"] = False
+    return user
+
+
+async def admin_only(user: dict = Depends(current_user)) -> dict:
+    if not user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Accès admin requis")
     return user
 
 
@@ -610,15 +638,17 @@ async def register(body: RegisterIn):
     existing = await db.users.find_one({"email": body.email.lower()})
     if existing:
         raise HTTPException(status_code=400, detail="Cet email est déjà utilisé")
+    is_admin_bootstrap = body.email.lower() in ADMIN_EMAILS
     user = {
         "id": str(uuid.uuid4()),
         "email": body.email.lower(),
         "password_hash": hash_password(body.password),
         "full_name": body.full_name,
+        "is_admin": is_admin_bootstrap,
         "created_at": now_iso(),
     }
     await db.users.insert_one(user)
-    public = UserPublic(id=user["id"], email=user["email"], full_name=user["full_name"], created_at=user["created_at"])
+    public = UserPublic(id=user["id"], email=user["email"], full_name=user["full_name"], created_at=user["created_at"], is_admin=user["is_admin"])
     return TokenOut(access_token=make_token(user["id"]), user=public)
 
 
@@ -627,13 +657,14 @@ async def login(body: LoginIn):
     user = await db.users.find_one({"email": body.email.lower()})
     if not user or not verify_password(body.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Email ou mot de passe incorrect")
-    public = UserPublic(id=user["id"], email=user["email"], full_name=user["full_name"], created_at=user["created_at"])
+    user = await _ensure_admin_flag(user)
+    public = UserPublic(id=user["id"], email=user["email"], full_name=user["full_name"], created_at=user["created_at"], is_admin=bool(user.get("is_admin")))
     return TokenOut(access_token=make_token(user["id"]), user=public)
 
 
 @api_router.get("/auth/me", response_model=UserPublic)
 async def me(user: dict = Depends(current_user)):
-    return UserPublic(id=user["id"], email=user["email"], full_name=user["full_name"], created_at=user["created_at"])
+    return UserPublic(id=user["id"], email=user["email"], full_name=user["full_name"], created_at=user["created_at"], is_admin=bool(user.get("is_admin")))
 
 
 # ---------- Plan helpers ----------
@@ -1134,6 +1165,39 @@ async def stripe_webhook(request: Request):
 @api_router.get("/")
 async def root():
     return {"service": "ArtisanWeb API", "ok": True}
+
+
+# ---------- Admin ----------
+@api_router.get("/admin/stats")
+async def admin_stats(_admin: dict = Depends(admin_only)):
+    users_count = await db.users.count_documents({})
+    sites_count = await db.sites.count_documents({})
+    published_count = await db.sites.count_documents({"status": "published"})
+    leads_count = await db.leads.count_documents({})
+    pro_users = await db.users.count_documents({"pro_until": {"$gt": now_iso()}})
+    paid_txns = await db.payment_transactions.count_documents({"payment_status": "paid"})
+    revenue_pipeline = await db.payment_transactions.aggregate([
+        {"$match": {"payment_status": "paid"}},
+        {"$group": {"_id": "$currency", "total": {"$sum": "$amount"}, "count": {"$sum": 1}}},
+    ]).to_list(20)
+    return {
+        "users": users_count,
+        "sites": sites_count,
+        "published_sites": published_count,
+        "leads": leads_count,
+        "pro_users": pro_users,
+        "paid_transactions": paid_txns,
+        "revenue_by_currency": revenue_pipeline,
+    }
+
+
+@api_router.get("/admin/users")
+async def admin_users(_admin: dict = Depends(admin_only), limit: int = 100):
+    users = await db.users.find({}, {"_id": 0, "password_hash": 0}).sort("created_at", -1).to_list(min(limit, 500))
+    # Count sites per user
+    for u in users:
+        u["sites_count"] = await db.sites.count_documents({"user_id": u["id"]})
+    return users
 
 
 # ---------- Public files (object storage proxy) ----------
