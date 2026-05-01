@@ -52,10 +52,17 @@ Build a SaaS web application that auto-generates professional websites for Frenc
 - ✅ Fallback base64 si l'upload storage échoue (rétrocompatibilité)
 - ✅ Soft-delete via collection `db.files`
 
+### Phase 3 — Personnalisation visuelle (May 2026)
+- ✅ Theme picker dans le Builder (onglet Design): 6 presets de palette + 6 couples de polices Google Fonts + color pickers HEX
+- ✅ Drag & Drop (`@dnd-kit`) de l'ordre des sections du site (hero / value_props / services / about / contact); header + footer fixes
+- ✅ `theme` (primary_color, accent_color, font_heading, font_body) et `section_order` persistés via PUT /api/sites/{id}
+- ✅ Rendu live dans l'aperçu builder + sur le site public via `<style>` injecté ciblant les classes Tailwind arbitraires
+
 ## Tests
 - **iter 1 (MVP)**: 28/28 ✅
 - **iter 2 (P0+P1+P2)**: 18/19 PASS (1 XFAIL = bug confirmé)
 - **iter 3 (bug fixes)**: 8/8 PASS pour fixes ciblés ; phase2 14/14 ; iter1 26/27 (1 test coupling avec free tier limit, à fixer plus tard)
+- **iter 4 (theme + section reorder)**: 5/5 backend PASS + Playwright E2E OK (presets, fonts, DnD, save, persistance, rendu public)
 
 ## Backlog
 
