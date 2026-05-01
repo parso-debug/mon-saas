@@ -18,6 +18,7 @@ import BillingCancel from "@/pages/BillingCancel";
 import Admin from "@/pages/Admin";
 import Avis from "@/pages/Avis";
 import ShopBuilder from "@/pages/ShopBuilder";
+import OnboardingShop from "@/pages/OnboardingShop";
 import PublicShop from "@/pages/PublicShop";
 import PublicProduct from "@/pages/PublicProduct";
 import ShopCheckout from "@/pages/ShopCheckout";
@@ -49,6 +50,7 @@ export default function App() {
           <Route path="/billing/cancel" element={<Protected><BillingCancel /></Protected>} />
           <Route path="/admin" element={<Protected><Admin /></Protected>} />
           <Route path="/shop-builder/:shopId" element={<Protected><ShopBuilder /></Protected>} />
+          <Route path="/onboarding-shop" element={<Protected><OnboardingShop /></Protected>} />
           <Route path="/shop/:slug" element={<PublicShop />} />
           <Route path="/shop/:slug/product/:productSlug" element={<PublicProduct />} />
           <Route path="/shop/:slug/checkout" element={<ShopCheckout />} />

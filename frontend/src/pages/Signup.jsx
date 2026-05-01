@@ -1,15 +1,17 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, ShoppingBag } from "lucide-react";
 
 export default function Signup() {
   const { register } = useAuth();
   const nav = useNavigate();
+  const [params] = useSearchParams();
+  const intent = params.get("intent"); // "shop" => redirect to onboarding-shop
   const [form, setForm] = useState({ full_name: "", email: "", password: "" });
   const [loading, setLoading] = useState(false);
 
@@ -23,7 +25,7 @@ export default function Signup() {
     try {
       await register(form.email, form.password, form.full_name);
       toast.success("Bienvenue sur artisanweb !");
-      nav("/onboarding");
+      nav(intent === "shop" ? "/onboarding-shop" : "/onboarding");
     } catch (err) {
       toast.error(err?.response?.data?.detail || "Échec de l'inscription");
     } finally {
@@ -42,8 +44,8 @@ export default function Signup() {
             <span className="font-display font-bold tracking-tight">artisanweb</span>
           </Link>
           <div className="font-mono-grotesk text-[10px] uppercase tracking-[0.2em] text-[#71717A] mb-3">// nouveau compte</div>
-          <h1 className="font-display font-bold text-4xl tracking-tight leading-tight mb-2">Créons votre compte.</h1>
-          <p className="text-[#52525B] mb-8">Gratuit, sans carte bancaire.</p>
+          <h1 className="font-display font-bold text-4xl tracking-tight leading-tight mb-2">{intent === "shop" ? "Lancez votre boutique." : "Créons votre compte."}</h1>
+          <p className="text-[#52525B] mb-8">{intent === "shop" ? "Catalogue, panier et paiement Stripe en quelques clics." : "Gratuit, sans carte bancaire."}</p>
 
           <form onSubmit={onSubmit} className="space-y-5">
             <div>
@@ -71,16 +73,33 @@ export default function Signup() {
         <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'radial-gradient(circle at 70% 30%, #F95A2C 0%, transparent 50%)' }} />
         <div className="relative max-w-md">
           <div className="font-mono-grotesk text-[10px] uppercase tracking-[0.2em] text-[#A1A1AA] mb-3">// next step</div>
-          <h2 className="font-display font-bold text-4xl tracking-tight leading-tight mb-6">
-            Dans 5 minutes,<br/>
-            <span className="italic font-serif-instrument font-normal text-[#F95A2C]">votre site est en ligne.</span>
-          </h2>
-          <ul className="space-y-3 text-[#A1A1AA]">
-            <li>· Pas besoin de compétences techniques</li>
-            <li>· Génération IA en français</li>
-            <li>· SEO local optimisé</li>
-            <li>· Capture de leads incluse</li>
-          </ul>
+          {intent === "shop" ? (
+            <>
+              <h2 className="font-display font-bold text-4xl tracking-tight leading-tight mb-6">
+                Une vraie <span className="italic font-serif-instrument font-normal text-[#F95A2C]">boutique en ligne</span><br/>
+                ouverte 24/7.
+              </h2>
+              <ul className="space-y-3 text-[#A1A1AA]">
+                <li className="flex items-center gap-2"><ShoppingBag className="w-3.5 h-3.5 text-[#F95A2C]" /> Catalogue illimité avec variantes</li>
+                <li className="flex items-center gap-2"><ShoppingBag className="w-3.5 h-3.5 text-[#F95A2C]" /> Paiement Stripe sécurisé</li>
+                <li className="flex items-center gap-2"><ShoppingBag className="w-3.5 h-3.5 text-[#F95A2C]" /> Livraison configurable</li>
+                <li className="flex items-center gap-2"><ShoppingBag className="w-3.5 h-3.5 text-[#F95A2C]" /> Gestion des commandes intégrée</li>
+              </ul>
+            </>
+          ) : (
+            <>
+              <h2 className="font-display font-bold text-4xl tracking-tight leading-tight mb-6">
+                Dans 5 minutes,<br/>
+                <span className="italic font-serif-instrument font-normal text-[#F95A2C]">votre site est en ligne.</span>
+              </h2>
+              <ul className="space-y-3 text-[#A1A1AA]">
+                <li>· Pas besoin de compétences techniques</li>
+                <li>· Génération IA en français</li>
+                <li>· SEO local optimisé</li>
+                <li>· Capture de leads incluse</li>
+              </ul>
+            </>
+          )}
         </div>
       </div>
     </div>

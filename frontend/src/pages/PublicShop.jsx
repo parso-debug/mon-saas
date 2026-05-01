@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
-import { ShoppingCart, Store, Phone, Mail, MapPin, Plus, Minus, X, ArrowRight } from "lucide-react";
+import { ShoppingCart, Store, Phone, Mail, MapPin, Plus, Minus, X, ArrowRight, Check } from "lucide-react";
 import { resolveImg } from "@/lib/api";
 import { readCart, addToCart, updateQty, removeItem, cartCount, cartSubtotalCents, fmtPrice } from "@/lib/shopCart";
 
@@ -88,6 +88,7 @@ export default function PublicShop() {
   const [loading, setLoading] = useState(true);
   const [cartOpen, setCartOpen] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const [activeCategory, setActiveCategory] = useState("all");
 
   useEffect(() => {
     axios.get(`${API}/public/shops/${slug}`)
@@ -109,6 +110,9 @@ export default function PublicShop() {
   const theme = shop.theme || {};
   const currency = shop.currency || "EUR";
 
+  const categories = Array.from(new Set((products || []).map((p) => p.category).filter(Boolean)));
+  const filteredProducts = activeCategory === "all" ? products : products.filter((p) => p.category === activeCategory);
+
   const themeCss = `
     .pshop .bg-\\[\\#1F3D2D\\]{background-color:${theme.primary_color||"#1F3D2D"}!important}
     .pshop .hover\\:bg-\\[\\#1F3D2D\\]:hover{background-color:${theme.primary_color||"#1F3D2D"}!important}
@@ -123,7 +127,7 @@ export default function PublicShop() {
   return (
     <div className="pshop min-h-screen bg-[#FDFBF7]" data-testid="public-shop">
       <style dangerouslySetInnerHTML={{ __html: themeCss }} />
-      <header className="border-b border-[#E5E1D8] bg-[#FDFBF7] sticky top-0 z-30">
+      <header className="border-b border-[#E5E1D8] bg-[#FDFBF7] sticky top-0 z-30 backdrop-blur">
         <div className="max-w-6xl mx-auto px-4 md:px-8 h-16 md:h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
             {shop.logo_url ? (
@@ -142,31 +146,94 @@ export default function PublicShop() {
         </div>
       </header>
 
-      <section className="max-w-6xl mx-auto px-4 md:px-8 py-12 md:py-16">
-        <div className="font-manrope text-[11px] uppercase tracking-[0.25em] text-[#1F3D2D] mb-4">— Catalogue</div>
-        <h1 className="font-serif-instrument text-4xl md:text-5xl text-[#111827] leading-tight mb-3">{shop.name}</h1>
-        {shop.description && <p className="font-manrope text-[#6B7280] text-lg max-w-2xl">{shop.description}</p>}
-      </section>
-
-      <section className="max-w-6xl mx-auto px-4 md:px-8 pb-20">
-        {products.length === 0 ? (
-          <div className="text-center py-20 text-[#6B7280] font-manrope" data-testid="empty-catalog">Aucun produit pour le moment.</div>
-        ) : (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {products.map((p) => (
-              <article key={p.id} data-testid={`product-${p.id}`} className="group cursor-pointer" onClick={() => nav(`/shop/${slug}/product/${p.slug}`)}>
-                <div className="aspect-square bg-[#F3F1EC] overflow-hidden rounded-md mb-3 border border-[#E5E1D8]">
+      {/* HERO — Shopify-light feel */}
+      <section className="relative overflow-hidden bg-[#1F3D2D] text-[#FDFBF7]">
+        <div className="absolute inset-0 opacity-[0.04] pointer-events-none" style={{ backgroundImage: "radial-gradient(circle at 20% 30%, rgba(255,255,255,0.4) 0.5px, transparent 0.5px), radial-gradient(circle at 75% 70%, rgba(255,255,255,0.3) 0.5px, transparent 0.5px)", backgroundSize: "24px 24px" }} />
+        <div className="relative max-w-6xl mx-auto px-4 md:px-8 py-14 md:py-20 grid md:grid-cols-2 gap-10 items-center">
+          <div>
+            <div className="font-manrope text-[11px] uppercase tracking-[0.25em] text-[#C84B31] mb-4">— Catalogue</div>
+            <h1 className="font-serif-instrument text-5xl md:text-6xl leading-[1.05]">{shop.name}</h1>
+            {shop.description && <p className="mt-6 font-manrope text-lg text-[#FDFBF7]/80 leading-relaxed max-w-xl">{shop.description}</p>}
+            <div className="mt-8 flex flex-wrap gap-6 text-xs font-manrope text-[#FDFBF7]/70">
+              <div className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-[#C84B31]" /> Paiement sécurisé</div>
+              <div className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-[#C84B31]" /> Livraison {shop.shipping_rates?.length || 3} options</div>
+              <div className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-[#C84B31]" /> TVA incluse</div>
+            </div>
+          </div>
+          <div className="hidden md:block">
+            <div className="relative grid grid-cols-2 gap-3">
+              {(products || []).slice(0, 4).map((p, i) => (
+                <div key={p.id} className="aspect-square bg-[#FDFBF7]/5 border border-white/10 rounded-md overflow-hidden" style={{ transform: i % 2 === 0 ? "translateY(-10px)" : "translateY(10px)" }}>
                   {(p.images || [])[0] ? (
-                    <img src={resolveImg(p.images[0])} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                    <img src={resolveImg(p.images[0])} alt="" className="w-full h-full object-cover" />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center text-[#6B7280]"><Store className="w-10 h-10" /></div>
+                    <div className="w-full h-full flex items-center justify-center text-[#FDFBF7]/30"><Store className="w-8 h-8" /></div>
                   )}
                 </div>
-                <h3 className="font-serif-instrument text-xl text-[#111827] group-hover:text-[#C84B31] transition-colors">{p.name}</h3>
-                <div className="font-manrope text-[#1F3D2D] font-medium mt-1">{fmtPrice(p.price_cents, currency)}</div>
-                {p.stock <= 0 && <div className="text-[10px] uppercase tracking-[0.2em] text-[#C84B31] mt-1">Rupture</div>}
-              </article>
+              ))}
+              {(!products || products.length === 0) && (
+                <div className="col-span-2 aspect-[2/1] bg-[#FDFBF7]/5 border border-white/10 rounded-md flex items-center justify-center text-[#FDFBF7]/50 font-manrope text-sm">
+                  Aucun produit encore
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CATEGORIES CHIPS */}
+      {categories.length > 0 && (
+        <section className="border-b border-[#E5E1D8] bg-[#FDFBF7]">
+          <div className="max-w-6xl mx-auto px-4 md:px-8 py-5 flex items-center gap-2 overflow-x-auto" data-testid="category-chips">
+            <button type="button" onClick={() => setActiveCategory("all")} data-testid="cat-all" className={`shrink-0 px-4 py-2 rounded-full font-manrope text-sm transition-colors ${activeCategory === "all" ? "bg-[#1F3D2D] text-white" : "bg-white border border-[#E5E1D8] text-[#374151] hover:border-[#1F3D2D]"}`}>
+              Tous
+            </button>
+            {categories.map((c) => (
+              <button key={c} type="button" onClick={() => setActiveCategory(c)} data-testid={`cat-${c.toLowerCase().replace(/\s+/g, "-")}`} className={`shrink-0 px-4 py-2 rounded-full font-manrope text-sm transition-colors ${activeCategory === c ? "bg-[#1F3D2D] text-white" : "bg-white border border-[#E5E1D8] text-[#374151] hover:border-[#1F3D2D]"}`}>
+                {c}
+              </button>
             ))}
+          </div>
+        </section>
+      )}
+
+      {/* CATALOG GRID */}
+      <section className="max-w-6xl mx-auto px-4 md:px-8 py-12 md:py-16 pb-20">
+        {filteredProducts.length === 0 ? (
+          <div className="text-center py-20 text-[#6B7280] font-manrope" data-testid="empty-catalog">Aucun produit dans cette catégorie.</div>
+        ) : (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-10">
+            {filteredProducts.map((p) => {
+              const discount = p.compare_at_cents && p.compare_at_cents > p.price_cents ? Math.round((1 - p.price_cents / p.compare_at_cents) * 100) : 0;
+              return (
+                <article key={p.id} data-testid={`product-${p.id}`} className="group cursor-pointer" onClick={() => nav(`/shop/${slug}/product/${p.slug}`)}>
+                  <div className="relative aspect-square bg-[#F3F1EC] overflow-hidden rounded-md mb-3 border border-[#E5E1D8]">
+                    {(p.images || [])[0] ? (
+                      <img src={resolveImg(p.images[0])} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-[#6B7280]"><Store className="w-10 h-10" /></div>
+                    )}
+                    {discount > 0 && (
+                      <div className="absolute top-3 left-3 bg-[#C84B31] text-white font-mono-grotesk text-[10px] uppercase tracking-[0.15em] px-2.5 py-1 rounded">-{discount}%</div>
+                    )}
+                    {p.stock <= 0 && (
+                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                        <div className="bg-white text-[#111827] font-mono-grotesk text-[10px] uppercase tracking-[0.2em] px-3 py-1.5 rounded">Rupture de stock</div>
+                      </div>
+                    )}
+                    {p.stock > 0 && p.stock <= 5 && (
+                      <div className="absolute bottom-3 left-3 bg-white/95 backdrop-blur font-manrope text-[10px] text-[#C84B31] px-2 py-1 rounded">Plus que {p.stock} en stock</div>
+                    )}
+                  </div>
+                  {p.category && <div className="font-manrope text-[10px] uppercase tracking-[0.2em] text-[#6B7280]">{p.category}</div>}
+                  <h3 className="font-serif-instrument text-xl text-[#111827] group-hover:text-[#C84B31] transition-colors mt-1">{p.name}</h3>
+                  <div className="mt-1.5 flex items-baseline gap-2">
+                    <span className="font-manrope text-[#1F3D2D] font-medium">{fmtPrice(p.price_cents, currency)}</span>
+                    {discount > 0 && <span className="font-manrope text-sm text-[#6B7280] line-through">{fmtPrice(p.compare_at_cents, currency)}</span>}
+                  </div>
+                </article>
+              );
+            })}
           </div>
         )}
       </section>

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import * as Lucide from "lucide-react";
-import { ArrowRight, Sparkles, Wand2, Globe, MessageSquare, Check, Zap, Shield } from "lucide-react";
+import { ArrowRight, Sparkles, Wand2, Globe, MessageSquare, Check, Zap, Shield, ShoppingBag, CreditCard, Truck, Store, Package } from "lucide-react";
 import { fetchAppSettings } from "@/lib/settings";
 import { resolveImg } from "@/lib/api";
 
@@ -24,6 +24,7 @@ const Nav = ({ s }) => (
       {(s.navbar?.items || []).map((it, i) => (
         <a key={i} href={it.href} className="text-xs font-medium px-3 py-1.5 hover:bg-black/5 rounded-full transition-colors">{it.label}</a>
       ))}
+      <a href="#shop" className="text-xs font-medium px-3 py-1.5 hover:bg-black/5 rounded-full transition-colors text-[#1F3D2D]" data-testid="nav-shop">Boutique</a>
     </div>
     <div className="flex items-center gap-1.5 ml-1">
       <Link to="/login"><Button variant="ghost" size="sm" className="text-xs rounded-full" data-testid="nav-login">{s.navbar?.cta_login || "Se connecter"}</Button></Link>
@@ -257,6 +258,106 @@ export default function Landing() {
             </>
           );
         })()}
+      </section>
+
+      {/* E-COMMERCE CTA — Shopify-light boutique */}
+      <section id="shop" className="relative py-24 md:py-32 px-6 md:px-12 bg-[#1F3D2D] text-[#FDFBF7] overflow-hidden" data-testid="shop-cta-section">
+        <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: "radial-gradient(circle at 20% 30%, rgba(255,255,255,0.4) 0.5px, transparent 0.5px), radial-gradient(circle at 75% 70%, rgba(255,255,255,0.3) 0.5px, transparent 0.5px)", backgroundSize: "24px 24px" }} />
+        <div className="relative max-w-7xl mx-auto grid lg:grid-cols-12 gap-12 items-center">
+          <div className="lg:col-span-7">
+            <div className="inline-flex items-center gap-2 font-mono-grotesk text-[10px] uppercase tracking-[0.2em] text-[#C84B31] border border-[#C84B31]/30 px-3 py-1.5 rounded-full mb-8">
+              <ShoppingBag className="w-3 h-3" /> Nouveau · boutique en ligne
+            </div>
+            <h2 className="font-display font-bold text-5xl md:text-6xl lg:text-7xl tracking-tight leading-[0.95]">
+              Commerçant ?<br />
+              <span className="font-serif-instrument italic font-normal text-[#C84B31]">Votre boutique</span><br />
+              ouverte 24/7.
+            </h2>
+            <p className="mt-8 font-manrope text-lg md:text-xl text-[#FDFBF7]/80 max-w-xl leading-relaxed">
+              Catalogue, variantes (taille/couleur), stock, panier, paiement Stripe, livraison configurable, gestion des commandes. <b className="text-white">Une vraie boutique e-commerce</b> — générée automatiquement et prête à vendre en quelques minutes.
+            </p>
+
+            <div className="mt-10 grid sm:grid-cols-3 gap-6 text-sm font-manrope">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-md bg-[#C84B31]/15 text-[#C84B31] flex items-center justify-center shrink-0"><Package className="w-4 h-4" /></div>
+                <div>
+                  <div className="font-semibold text-white">Catalogue illimité</div>
+                  <div className="text-[#FDFBF7]/60 text-xs mt-1">Photos, variantes, stock, catégories.</div>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-md bg-[#C84B31]/15 text-[#C84B31] flex items-center justify-center shrink-0"><CreditCard className="w-4 h-4" /></div>
+                <div>
+                  <div className="font-semibold text-white">Paiement Stripe</div>
+                  <div className="text-[#FDFBF7]/60 text-xs mt-1">CB, Apple Pay, Google Pay. TVA incluse.</div>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-md bg-[#C84B31]/15 text-[#C84B31] flex items-center justify-center shrink-0"><Truck className="w-4 h-4" /></div>
+                <div>
+                  <div className="font-semibold text-white">Livraison sur-mesure</div>
+                  <div className="text-[#FDFBF7]/60 text-xs mt-1">Retrait boutique + tarifs fixes.</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-10 flex flex-wrap gap-3">
+              <Link to="/signup?intent=shop">
+                <Button size="lg" className="bg-[#C84B31] hover:bg-[#FDFBF7] hover:text-[#1F3D2D] text-white rounded-none h-14 px-8 text-base font-medium transition-colors" data-testid="shop-cta-primary">
+                  Créer votre boutique en ligne <ArrowRight className="ml-2 w-4 h-4" />
+                </Button>
+              </Link>
+              <Link to="/shop/la-boutique-de-demo" target="_blank">
+                <Button size="lg" variant="outline" className="rounded-none h-14 px-8 text-base bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white hover:border-white" data-testid="shop-cta-demo">
+                  Voir la démo <Store className="ml-2 w-4 h-4" />
+                </Button>
+              </Link>
+            </div>
+          </div>
+
+          <div className="lg:col-span-5">
+            <div className="relative">
+              {/* Mock product grid preview */}
+              <div className="bg-[#FDFBF7] rounded-md p-5 shadow-2xl">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <div className="font-serif-instrument italic text-xl text-[#111827]">Ma Boutique</div>
+                    <div className="font-manrope text-[9px] uppercase tracking-[0.2em] text-[#6B7280]">boutique · paris</div>
+                  </div>
+                  <div className="bg-[#1F3D2D] text-white text-xs font-manrope px-3 py-1.5 rounded-md flex items-center gap-1.5"><ShoppingBag className="w-3 h-3" /> 2</div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { n: "Bougie Forêt", p: "18 €", bg: "linear-gradient(135deg,#F3F1EC,#D4C9B8)" },
+                    { n: "Mug Artisanal", p: "22 €", bg: "linear-gradient(135deg,#E5E1D8,#C0B8A6)" },
+                    { n: "T-shirt Bio", p: "34,90 €", bg: "linear-gradient(135deg,#1F3D2D,#2F5D42)" },
+                    { n: "Carnet A5", p: "12 €", bg: "linear-gradient(135deg,#C84B31,#E86E4F)" },
+                  ].map((it, i) => (
+                    <div key={i} className="border border-[#E5E1D8] rounded">
+                      <div className="aspect-square rounded-t" style={{ background: it.bg }} />
+                      <div className="p-2">
+                        <div className="font-manrope text-xs font-medium text-[#111827] truncate">{it.n}</div>
+                        <div className="font-manrope text-xs text-[#1F3D2D] font-semibold mt-0.5">{it.p}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <button className="mt-4 w-full bg-[#1F3D2D] text-white font-manrope text-sm py-2.5 rounded-md flex items-center justify-center gap-2" disabled>
+                  Passer au paiement <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* Floating order card */}
+              <div className="absolute -bottom-6 -left-4 bg-[#FDFBF7] border border-[#E5E1D8] rounded-md p-4 shadow-xl hidden md:flex items-center gap-3 max-w-[260px]">
+                <div className="w-10 h-10 rounded-full bg-[#1F3D2D] text-white flex items-center justify-center shrink-0"><Check className="w-5 h-5" /></div>
+                <div>
+                  <div className="font-manrope text-xs font-semibold text-[#111827]">Commande #A3F2</div>
+                  <div className="font-manrope text-[11px] text-[#6B7280]">89,90 € · Camille B. · payée</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
 
       {/* PRICING */}

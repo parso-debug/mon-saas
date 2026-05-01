@@ -1,0 +1,29 @@
+{
+  "summary": "Iteration 6 — Frontend-only validation of the new e-commerce onboarding & Shopify-light boutique UI. ALL TARGETED CHECKS PASS. Validated: (1) Landing page #shop section: data-testid shop-cta-section visible, nav-shop link href=#shop, shop-cta-primary -> /signup?intent=shop, shop-cta-demo -> /shop/la-boutique-de-demo. (2) Signup with ?intent=shop: H1 reads 'Lancez votre boutique.', right-side panel shows boutique features (Catalogue illimité avec variantes, Paiement Stripe sécurisé, Livraison configurable, Gestion des commandes intégrée), and after register() the user is redirected to /onboarding-shop (not /onboarding). (3) /onboarding-shop FREE user: shop-pro-upsell visible, upgrade-to-pro-btn -> /billing, see-shop-demo -> /shop/la-boutique-de-demo, shop-create-form correctly hidden. (4) /onboarding-shop PRO user (demo.pro@artisanweb.fr): shop-pro-upsell hidden, shop-create-form visible with all fields shop-create-name/city/desc/submit. (5) Public shop /shop/la-boutique-de-demo: new dark-green hero, 4 product preview tiles, category-chips with cat-all + cat-textile + cat-céramique + cat-maison (3 cats from 3 products), category filter works (Maison shows 1 product, Tous shows 3). (6) Discount badge -13% rendered on T-shirt Bio (compare_at 39.90€ → 34.90€), and Bougie (stock=7) correctly does NOT show 'Plus que X en stock' badge. (7) Regression cart→checkout: T-shirt → variant Taille=M + Couleur=Noir → add-to-cart → cart-drawer opens → cart-item-0 present → go-to-checkout navigates to /shop/la-boutique-de-demo/checkout with name/phone/email/address inputs, 3 shipping radios (Retrait à Lyon Gratuit / France métropolitaine 4,90€ / Union européenne 9,90€), summary panel shows Sous-total 34,90€ / Livraison Gratuit / dont TVA (20%) 5,82€ / Total 34,90€, pay-button visible. Stripe redirect not exercised this run (already validated iter 5 with sk_test_emergent).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/onboarding-shop (free user)", "issues": ["First render shows 'Chargement…' for ~1-2s while /api/billing/me resolves; consider an immediate skeleton card so the upsell isn't replaced by plain text. Not blocking."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "OnboardingShop.jsx: on /billing/me failure (.catch=>{}) billing stays null forever showing 'Chargement…' — for an unauthenticated/expired token the user is stuck. Suggest setting billing={plan:'free'} in catch so the upsell is shown by default.",
+    "Signup.jsx: useSearchParams reads intent on first render but isn't re-read if URL changes — fine for current usage. The conditional copy on the right panel is clean.",
+    "PublicShop.jsx: category chip data-testid uses lowercase + '-' replace but unaccented chars are not normalized (e.g. 'Céramique' becomes cat-céramique). Works (selector matched) but consider normalize('NFD').replace(/[\\u0300-\\u036f]/g,'') for ASCII testids.",
+    "PublicShop.jsx: discount % computed inline on every render — fine here but could be memoized or computed once when products is set.",
+    "Landing.jsx: nav-shop is rendered outside the dynamic s.navbar?.items list — if a future admin adds a 'Boutique' nav item it will appear twice. Consider sourcing the label from settings.",
+    "Landing.jsx shop-cta-section uses bg-[#1F3D2D] hardcoded — for theme consistency consider exposing it via app-settings (similar to hero/features). Low priority."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only run)", "frontend": "100% on the targeted shop onboarding + public boutique flows (8/8 checks)."},
+  "test_credentials": "demo.pro@artisanweb.fr / demo1234 (Pro). Free users created ad-hoc test_shopfree_<rnd>@example.com / testpass123.",
+  "seed_data_creation": "None — re-used existing demo seed.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Onboarding-shop free-vs-pro gate is fully wired and working. The /billing/me call is what gates the UI — if the call is slow, the page briefly shows 'Chargement…'. For future runs the simplest reproduction of the upsell is: register a fresh user via /signup?intent=shop (any unique email). The Pro user flow assumes existing demo.pro seed. La Boutique de Démo has 3 products in 3 categories (Textile/Céramique/Maison); only the T-shirt has compare_at_cents>price_cents so only one -13% badge appears. The category chip testid is built from the lowercased category with spaces replaced by '-' — accented chars are NOT stripped (so 'Céramique' → 'cat-céramique').",
+  "rca_of_the_issue": "No bugs found. All 8 acceptance criteria from the request pass. The only minor gap is OnboardingShop.jsx not having a fallback for a failed /billing/me request (would leave the page stuck on 'Chargement…'); main agent can ship as-is or add a default `setBilling({plan:'free'})` in the .catch block for robustness."
+}
