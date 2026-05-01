@@ -4,7 +4,7 @@ import api, { resolveImg } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Plus, ExternalLink, Trash2, MessageSquare, LogOut, Globe, Loader2, Crown, Sparkles } from "lucide-react";
+import { Plus, ExternalLink, Trash2, MessageSquare, LogOut, Globe, Loader2, Crown, Sparkles, Store, ShoppingBag, Lock } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
@@ -15,18 +15,24 @@ export default function Dashboard() {
   const { user, logout } = useAuth();
   const nav = useNavigate();
   const [sites, setSites] = useState([]);
+  const [shops, setShops] = useState([]);
   const [loading, setLoading] = useState(true);
   const [billing, setBilling] = useState(null);
+  const [creatingShop, setCreatingShop] = useState(false);
 
   const load = async () => {
     setLoading(true);
     try {
-      const r = await api.get("/sites");
+      const [r, sh, b] = await Promise.all([
+        api.get("/sites"),
+        api.get("/shops").catch(() => ({ data: [] })),
+        api.get("/billing/me"),
+      ]);
       setSites(r.data);
-      const b = await api.get("/billing/me");
+      setShops(sh.data || []);
       setBilling(b.data);
     } catch (e) {
-      toast.error("Impossible de charger les sites");
+      toast.error("Impossible de charger vos projets");
     } finally {
       setLoading(false);
     }
@@ -40,6 +46,38 @@ export default function Dashboard() {
       load();
     } catch (e) {
       toast.error("Erreur de suppression");
+    }
+  };
+
+  const onDeleteShop = async (id) => {
+    try {
+      await api.delete(`/shops/${id}`);
+      toast.success("Boutique supprimée");
+      load();
+    } catch (e) {
+      toast.error("Erreur");
+    }
+  };
+
+  const createShop = async () => {
+    const name = window.prompt("Nom de la boutique ?", "Ma boutique");
+    if (!name) return;
+    const city = window.prompt("Ville (optionnel) ?", "") || "";
+    setCreatingShop(true);
+    try {
+      const r = await api.post("/shops", { name, city });
+      toast.success("Boutique créée");
+      nav(`/shop-builder/${r.data.id}`);
+    } catch (e) {
+      const detail = e?.response?.data?.detail || "Erreur";
+      if (e?.response?.status === 402) {
+        toast.error(detail);
+        setTimeout(() => nav("/billing"), 1500);
+      } else {
+        toast.error(detail);
+      }
+    } finally {
+      setCreatingShop(false);
     }
   };
 
@@ -173,6 +211,71 @@ export default function Dashboard() {
                         <AlertDialogFooter>
                           <AlertDialogCancel>Annuler</AlertDialogCancel>
                           <AlertDialogAction onClick={() => onDelete(s.id)} className="bg-red-600 hover:bg-red-700">Supprimer</AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* --- Shops Section --- */}
+        <div className="mt-16 grid md:grid-cols-12 gap-8 items-end mb-8">
+          <div className="md:col-span-8">
+            <div className="font-mono-grotesk text-[10px] uppercase tracking-[0.2em] text-[#71717A] mb-3">// vos boutiques e-commerce</div>
+            <h2 className="font-display font-bold text-3xl md:text-4xl tracking-tight">Boutique en ligne</h2>
+            <p className="text-[#52525B] mt-2">Vendez vos produits en ligne — catalogue, panier, paiement Stripe, livraison configurable. <b>Plan Pro requis.</b></p>
+          </div>
+          <div className="md:col-span-4 md:flex md:justify-end">
+            <Button onClick={createShop} disabled={creatingShop} data-testid="create-shop-btn" className="rounded-none h-12 px-6 bg-[#1F3D2D] hover:bg-[#F95A2C] text-white">
+              {billing && billing.plan !== "pro" ? <Lock className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
+              {creatingShop ? "Création..." : "Créer une boutique"}
+            </Button>
+          </div>
+        </div>
+
+        {shops.length === 0 ? (
+          <div className="border border-black/10 bg-white p-12 text-center" data-testid="empty-shops">
+            <div className="w-14 h-14 bg-[#FAFAFA] border border-black/10 mx-auto mb-5 flex items-center justify-center">
+              <Store className="w-6 h-6 text-[#1F3D2D]" />
+            </div>
+            <h3 className="font-display font-bold text-xl tracking-tight mb-1">Aucune boutique</h3>
+            <p className="text-[#52525B] text-sm mb-5">{billing && billing.plan !== "pro" ? "Passez à Pro pour lancer votre e-commerce." : "Lancez votre catalogue en ligne en quelques minutes."}</p>
+          </div>
+        ) : (
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {shops.map((s) => (
+              <div key={s.id} data-testid={`shop-card-${s.id}`} className="border border-black/10 bg-white overflow-hidden group">
+                <div className="aspect-video bg-[#1F3D2D] relative overflow-hidden border-b border-black/10 flex items-center justify-center">
+                  {s.logo_url ? (
+                    <img src={resolveImg(s.logo_url)} alt={s.name} className="w-20 h-20 object-contain" />
+                  ) : (
+                    <Store className="w-12 h-12 text-[#FDFBF7]/80" />
+                  )}
+                  <div className="absolute top-3 left-3 font-mono-grotesk text-[10px] uppercase tracking-[0.2em] bg-white/90 backdrop-blur px-2 py-1">
+                    {s.status === "published" ? <span className="text-[#F95A2C]">● live</span> : <span className="text-[#71717A]">● draft</span>}
+                  </div>
+                </div>
+                <div className="p-5">
+                  <h3 className="font-display font-bold text-lg tracking-tight truncate">{s.name}</h3>
+                  <p className="font-mono-grotesk text-[10px] uppercase tracking-[0.2em] text-[#71717A] mt-1"><ShoppingBag className="w-3 h-3 inline mr-1" /> boutique · {s.city || "—"}</p>
+                  <div className="grid grid-cols-3 gap-2 mt-4">
+                    <Button size="sm" variant="outline" onClick={() => nav(`/shop-builder/${s.id}`)} data-testid={`open-shop-${s.id}`} className="rounded-none border-black/20 hover:bg-[#09090B] hover:text-white">Gérer</Button>
+                    <Button size="sm" variant="outline" onClick={() => window.open(`${window.location.origin}/shop/${s.slug}`, "_blank")} data-testid={`view-shop-${s.id}`} className="rounded-none border-black/20 hover:bg-[#09090B] hover:text-white"><ExternalLink className="w-3.5 h-3.5" /></Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button size="sm" variant="outline" data-testid={`delete-shop-${s.id}`} className="rounded-none border-black/20 hover:bg-red-600 hover:text-white hover:border-red-600"><Trash2 className="w-3.5 h-3.5" /></Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Supprimer cette boutique ?</AlertDialogTitle>
+                          <AlertDialogDescription>Tous les produits et commandes liés seront également supprimés. Action définitive.</AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Annuler</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => onDeleteShop(s.id)} className="bg-red-600 hover:bg-red-700">Supprimer</AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>

@@ -17,6 +17,11 @@ import BillingSuccess from "@/pages/BillingSuccess";
 import BillingCancel from "@/pages/BillingCancel";
 import Admin from "@/pages/Admin";
 import Avis from "@/pages/Avis";
+import ShopBuilder from "@/pages/ShopBuilder";
+import PublicShop from "@/pages/PublicShop";
+import PublicProduct from "@/pages/PublicProduct";
+import ShopCheckout from "@/pages/ShopCheckout";
+import ShopSuccess from "@/pages/ShopSuccess";
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
@@ -43,6 +48,11 @@ export default function App() {
           <Route path="/billing/success" element={<Protected><BillingSuccess /></Protected>} />
           <Route path="/billing/cancel" element={<Protected><BillingCancel /></Protected>} />
           <Route path="/admin" element={<Protected><Admin /></Protected>} />
+          <Route path="/shop-builder/:shopId" element={<Protected><ShopBuilder /></Protected>} />
+          <Route path="/shop/:slug" element={<PublicShop />} />
+          <Route path="/shop/:slug/product/:productSlug" element={<PublicProduct />} />
+          <Route path="/shop/:slug/checkout" element={<ShopCheckout />} />
+          <Route path="/shop/:slug/success" element={<ShopSuccess />} />
           <Route path="/site/:slug" element={<PublicSite />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>

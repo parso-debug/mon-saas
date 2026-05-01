@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 5: full validation of new e-commerce backend (Shops/Products/Orders/Checkout) + public storefront UI flow. Backend pytest suite test_shop_ecommerce.py — 29/29 PASS covering: free user 402 on POST /api/shops, Pro user creates shop with DEFAULT_SHIPPING_RATES (pickup/fr_metro/eu) + DEFAULT_SHOP_THEME + tax_rate=0.20, full Shop CRUD (list/get/update/publish/delete) + slug uniqueness, multi-tenant isolation (other Pro user gets 404 on shop/product/orders/update/delete), Product CRUD with two-axis variants [Taille S/M/L][Couleur Noir/Blanc], image upload returns /api/files/... and the file is downloadable (200), public /api/public/shops/{slug} only when status=published and strips user_id, public product 404 when not active, checkout validates empty cart→400, unknown shipping→400, insufficient stock→409, success creates Stripe session + persists Order(status=pending, applied=false) with tax-inclusive math (subtotal 24000 + ship 490 → tax 4082 / total 24490), public /orders/status/{session_id} responds 200 even with sk_test_emergent (initiated payment_status), owner GET /shops/{id}/orders, PUT status accepts pending/paid/shipped/delivered/cancelled and rejects invalid (400), other user 404 on owner orders, simulated paid via direct MongoDB patch reflects payment_status=paid in owner list. Regression: /api/auth/login + /api/public/sites/* untouched. Frontend Playwright on /shop/uitest-shop-lyon (a freshly published seed shop with one product 'Lampe Test' 45€, stock 20, variants Taille+Couleur): public-shop renders, open-cart present, product card click → public-product loads, variant-Taille-M and variant-Couleur-Noir select correctly, product-qty-inc bumps qty to 2, add-to-cart opens cart-drawer with cart-count=2, qty-inc-0 increments, go-to-checkout navigates to shop-checkout page which shows the proper summary (Sous-total 135€, Livraison Gratuit/Retrait, dont TVA 20% 22.50€, Total 135€), pay-button click triggers backend POST /public/shops/{slug}/checkout and the browser is redirected to https://checkout.stripe.com/c/pay/cs_test_... — full Stripe redirect confirmed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_shop_ecommerce.py",
+    "/app/test_reports/pytest/iter5_shop.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Good: ShopCreate/ShopUpdate/ProductIn use Pydantic with proper bounds (price_cents ge=0, qty 1..50, slug 3..60). user_id is stripped from public projections via _project_shop_public.",
+    "Good: _compute_order_amounts implements tax-inclusive correctly: tax = round(base - base/(1+rate)) — verified numerically (24490 → 4082).",
+    "Good: shop deletion cascades to products and orders (delete_many on both collections).",
+    "Good: publish endpoint is idempotent and only requires ownership.",
+    "Nit: CartItemIn.qty has hard cap le=50 — a customer wanting to buy 60 units gets a 422 (Pydantic validation) instead of a friendly 'stock' error. Consider raising the cap or returning a custom error message.",
+    "Nit: _apply_shop_order_if_paid silently swallows Stripe lookup errors and returns the unchanged order (only logs warning). With sk_test_emergent the success page will poll forever showing payment_status='initiated'. Consider exposing the lookup error to the polling endpoint so the UI can show a retry/manual-confirm path.",
+    "Nit: stock decrement in _apply_shop_order_if_paid uses a per-line update_one with stock>=qty filter — if any line lacks stock at apply time the update is silently skipped (no rollback or order failure). Webhooks may then mark order paid+applied while not all stock was decremented. Consider verifying matched_count and flagging the order as 'oversold' if any line failed.",
+    "Nit: ShopUpdate.shipping_rates is Optional[List[Dict[str,Any]]] with no schema validation — a malformed rate (missing id/amount_cents) will be persisted and crash _compute_order_amounts at checkout. A small Pydantic ShippingRate model would harden it.",
+    "Nit: theme field on Shop has no field-level validation (same issue flagged in iter 4 for sites). Hex color regex would prevent invalid CSS being injected client-side.",
+    "Nit: checkout endpoint does not enforce rate limiting — a hostile client could spam Stripe session creation. Consider per-IP throttling (already used elsewhere with throttle_check)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_shop_ecommerce.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (29/29)",
+    "frontend": "100% on tested flows: public catalog → product → cart drawer → checkout → Stripe redirect. Dashboard create-shop-btn (Pro vs Free gating) and /shop-builder/{id} back-office tabs were not exercised this run (covered indirectly via the underlying APIs which are 100% green)."
+  },
+  "test_credentials": "Test users registered ad-hoc with TEST_<role>_<uuid8>@example.com / testpass123. Pro tier set by patching db.users.pro_until directly via pymongo (lowercase email — the backend stores emails normalized). Seed data for the UI run: test_uipro_1777666078@example.com (pro), shop slug uitest-shop-lyon, product slug lampe-test.",
+  "seed_data_creation": "1 published shop 'UITest Shop' (slug uitest-shop-lyon) with 1 product 'Lampe Test' (45€, stock 20, variants Taille+Couleur) created via API for the public Playwright flow. Backend pytest fixtures create + tear down their own shops/products with TEST_ prefix.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter 5 covered the e-commerce phase end-to-end. The key discovery for testing: emails are lowercased on register/login by the backend, so any DB patch (pro_until, etc.) must lower() the email or the update_one will silently miss. The published seed shop /shop/uitest-shop-lyon is left in place and reusable by future runs (no PII). For a follow-up run focused on the merchant-side UI: register Pro user → patch pro_until → login (token in localStorage key 'aw_token') → goto /dashboard, click create-shop-btn (window.prompt — use page.on('dialog', lambda d: d.accept('Name'))), then exercise tab-products / new-product-btn / prod-* / variant-group / shop-publish on the resulting /shop-builder/:id page. The /shop/:slug/success page polling logic relies on /api/public/shops/{slug}/orders/status/{session_id} which currently returns initiated forever with sk_test_emergent — main agent may want to wire a manual 'mark-as-paid' admin shortcut for QA, or skip success-page assertion in tests.",
+  "rca_of_the_issue": "No bugs found. All 29 backend assertions and the full public storefront UI flow (including real Stripe Checkout session redirect) succeed end-to-end. The only friction observed during test setup was the email lowercase normalization (test-internal, not a product bug)."
+}
