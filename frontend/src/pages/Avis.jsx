@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import axios from "axios";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, ArrowRight, Star } from "lucide-react";
+import { ArrowLeft, ArrowRight, Star, MessageSquarePlus } from "lucide-react";
 import { fetchAppSettings } from "@/lib/settings";
 import { resolveImg } from "@/lib/api";
+import ReviewSubmitDialog from "@/components/ReviewSubmitDialog";
+
+const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const Stars = ({ rating = 5 }) => (
   <div className="flex items-center gap-0.5" aria-label={`${rating} étoiles sur 5`}>
@@ -22,24 +26,26 @@ const parseFRDate = (s) => {
 
 export default function Avis() {
   const [s, setS] = useState(null);
+  const [userReviews, setUserReviews] = useState([]);
   const [filter, setFilter] = useState("all"); // all | 5 | 4 | recent
   const [search, setSearch] = useState("");
 
   useEffect(() => {
     fetchAppSettings().then(setS).catch(() => setS({}));
+    axios.get(`${API}/public/reviews`).then((r) => setUserReviews(r.data || [])).catch(() => setUserReviews([]));
     document.title = "Avis clients · artisanweb";
   }, []);
 
   const list = useMemo(() => {
     if (!s) return [];
-    const arr = (s.testimonials && s.testimonials.length > 0)
-      ? [...s.testimonials]
+    const curated = (s.testimonials && s.testimonials.length > 0)
+      ? s.testimonials
       : (s.testimonial && s.testimonial.author ? [s.testimonial] : []);
+    const arr = [...curated, ...userReviews];
     let out = arr;
     if (filter === "5") out = out.filter((t) => (t.rating || 5) === 5);
     if (filter === "4") out = out.filter((t) => (t.rating || 5) >= 4);
-    if (filter === "recent") out = [...out].sort((a, b) => parseFRDate(b.date) - parseFRDate(a.date));
-    else out = [...out].sort((a, b) => parseFRDate(b.date) - parseFRDate(a.date));
+    out = [...out].sort((a, b) => parseFRDate(b.date) - parseFRDate(a.date));
     if (search.trim()) {
       const q = search.toLowerCase();
       out = out.filter((t) =>
@@ -49,15 +55,15 @@ export default function Avis() {
       );
     }
     return out;
-  }, [s, filter, search]);
+  }, [s, userReviews, filter, search]);
 
   const stats = useMemo(() => {
-    const arr = s?.testimonials || [];
+    const arr = [...(s?.testimonials || []), ...userReviews];
     const total = arr.length;
     if (total === 0) return { total: 0, avg: 0 };
     const sum = arr.reduce((a, t) => a + (t.rating || 5), 0);
     return { total, avg: (sum / total) };
-  }, [s]);
+  }, [s, userReviews]);
 
   if (!s) return <div className="min-h-screen bg-[#FAFAFA]" />;
 
@@ -126,14 +132,23 @@ export default function Avis() {
               </button>
             ))}
           </div>
-          <input
-            type="search"
-            placeholder="Rechercher par métier, ville, nom..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="bg-white border border-black/20 px-4 py-2 text-sm w-full md:w-72 focus:outline-none focus:border-[#F95A2C]"
-            data-testid="avis-search"
-          />
+          <div className="flex items-center gap-3 flex-1 md:flex-initial">
+            <input
+              type="search"
+              placeholder="Rechercher par métier, ville, nom..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="bg-white border border-black/20 px-4 py-2 text-sm w-full md:w-72 focus:outline-none focus:border-[#F95A2C]"
+              data-testid="avis-search"
+            />
+            <ReviewSubmitDialog
+              trigger={
+                <Button size="sm" className="rounded-none h-10 px-4 bg-[#F95A2C] hover:bg-[#09090B] text-white whitespace-nowrap" data-testid="leave-review-cta-top">
+                  <MessageSquarePlus className="w-3.5 h-3.5 mr-2" /> Laisser mon avis
+                </Button>
+              }
+            />
+          </div>
         </div>
       </section>
 
@@ -181,12 +196,19 @@ export default function Avis() {
               Votre avis sera<br /><span className="italic font-serif-instrument font-normal text-[#F95A2C]">le prochain.</span>
             </h2>
           </div>
-          <div className="md:col-span-4 md:flex md:justify-end">
-            <Link to="/signup">
-              <Button size="lg" className="bg-[#F95A2C] hover:bg-white hover:text-[#09090B] text-white rounded-none h-14 px-8 text-base" data-testid="avis-bottom-cta">
+          <div className="md:col-span-4 flex flex-col gap-3 md:items-end">
+            <Link to="/signup" className="block">
+              <Button size="lg" className="bg-[#F95A2C] hover:bg-white hover:text-[#09090B] text-white rounded-none h-14 px-8 text-base w-full" data-testid="avis-bottom-cta">
                 Créer mon site gratuitement <ArrowRight className="ml-2 w-4 h-4" />
               </Button>
             </Link>
+            <ReviewSubmitDialog
+              trigger={
+                <Button size="lg" variant="outline" className="rounded-none h-14 px-8 border-white text-white hover:bg-white hover:text-[#09090B] w-full" data-testid="avis-bottom-leave-cta">
+                  <MessageSquarePlus className="w-4 h-4 mr-2" /> Déjà client ? Laissez votre avis
+                </Button>
+              }
+            />
           </div>
         </div>
       </section>

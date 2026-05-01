@@ -1,0 +1,27 @@
+{
+  "summary": "Iteration 4: Full end-to-end validation of the new Design tab (theme palette + font pairs + drag&drop section reorder). Backend: 5/5 new tests PASS in test_theme_sections.py — PUT /api/sites/{id} persists theme + section_order, GET (auth) returns them, GET /api/public/sites/{slug} exposes them without user_id leakage, backward-compat PUT (no theme/section_order) does not wipe previously saved values, full theme replacement works. Frontend: end-to-end Playwright flow through /builder/{id}: Design tab renders theme-picker and sections-reorder, clicking color-preset-bleu-nuit updates both color inputs to #1e3a8a / #f59e0b, font-pair-magazine toggles active style, sections-reset restores ['hero','value_props','services','about','contact'], keyboard DnD on drag-handle-hero reorders to ['value_props','hero',...], builder-save persists both theme and section_order, and the public /site/{slug} page renders with new primary_color on the About/CTA blocks, Playfair Display headings and value_props BEFORE hero — confirming the custom section_order is rendered on the public site.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_theme_sections.py",
+    "/app/test_reports/pytest/iter4_theme_sections.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Good: SiteUpdate uses Optional[Dict] + Optional[List[str]] so partial PUT (no theme/section_order) correctly skips them via the `if v is not None` filter — backward-compat preserved.",
+    "Good: /api/public/sites/{slug} still strips user_id and domain_token before returning — theme and section_order are the only additions and are safe to expose.",
+    "Nit: server has no whitelist/validation of section_order values — user could POST arbitrary strings like ['foo','bar']. ArtisanTemplate filters on known ids client-side (SectionsReorder also filters), so this is defensive-in-depth only, not a security issue; a Pydantic Literal constraint would make the contract explicit.",
+    "Nit: theme is Optional[Dict[str, Any]] with no field-level validation (e.g., primary_color not validated as hex). A small Pydantic model Theme(primary_color: str, accent_color: str, font_heading: str, font_body: str) with regex hex validation would harden the endpoint and enable better error messages for the builder.",
+    "Nit: theme-primary-color and theme-accent-color inputs fire onChange per-keystroke on both the color picker and the text input — no debouncing — fine because save is manual, but consider useDeferredValue if <style> injection becomes heavy on large previews."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_theme_sections.py (new)"
+  ],
+  "success_rate": {"backend": "100% (5/5 theme+section_order tests PASS)", "frontend": "100% (all 9 UI assertions PASS: design tab, theme-picker, color preset, font pair, reorder default+reset+keyboard-DnD, save, persistence after reload, public render)"},
+  "test_credentials": "Random TEST_ prefixed emails per test session (e.g. TEST_ui_<uuid>@example.com / pass1234). No shared creds.",
+  "seed_data_creation": "Each run registers a fresh user, generates one site with generate_image=false (Claude content only, no Gemini image to save budget), exercises the endpoints, then deletes the site. No orphan data.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter 4 covered the Design tab feature set only (theme + section_order). Existing suites test_artisanweb.py and test_artisanweb_phase2.py were NOT re-run this iteration (scope was the new feature). The new test file test_theme_sections.py relies on POST /api/sites/generate with generate_image=false, which still consumes a small Claude budget (~1 call per test session due to module-scoped fixture). Playwright flow uses localStorage key 'aw_token' (confirmed correct) and dispatches keyboard DnD (Space, ArrowDown, Space) on [data-testid=drag-handle-hero] which successfully triggers @dnd-kit reorder — use this pattern over mouse drag for determinism. If expanding coverage: validate edge case where section_order omits or duplicates section names — current server accepts any strings.",
+  "rca_of_the_issue": "No bugs found. Implementation verified correct end-to-end: (1) Pydantic SiteUpdate.theme: Optional[Dict[str,Any]] and section_order: Optional[List[str]] serialize/deserialize cleanly; (2) update_site's {k:v for k,v in ... if v is not None} correctly skips missing fields preserving backward-compat; (3) Builder.save() includes both fields in the PUT body; (4) ThemePicker calls onChange with the full merged theme dict on preset click and on color input change; (5) SectionsReorder uses @dnd-kit with arrayMove and invokes onChange on drag end and reset; (6) ArtisanTemplate reads site.section_order and site.theme to render in custom order with injected <style> — confirmed visually on the public site."
+}

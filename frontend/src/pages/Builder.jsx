@@ -9,6 +9,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ArtisanTemplate from "@/components/ArtisanTemplate";
 import ContentEditor from "@/components/ContentEditor";
 import DomainPanel from "@/components/DomainPanel";
+import SectionsReorder, { DEFAULT_SECTION_ORDER } from "@/components/SectionsReorder";
+import ThemePicker, { DEFAULT_THEME } from "@/components/ThemePicker";
 
 export default function Builder() {
   const { siteId } = useParams();
@@ -62,6 +64,8 @@ export default function Builder() {
         services: site.services,
         show_map: site.show_map,
         map_address: site.map_address,
+        theme: site.theme,
+        section_order: site.section_order,
       });
       toast.success("Modifications enregistrées");
     } catch (e) {
@@ -254,6 +258,28 @@ export default function Builder() {
                   {site.logo_url ? "Régénérer le logo" : "Générer un logo"}
                 </Button>
               </div>
+            </div>
+
+            {/* Couleurs & Polices */}
+            <div className="bg-white border border-black/10 p-6" data-testid="design-theme">
+              <div className="font-mono-grotesk text-[10px] uppercase tracking-[0.2em] text-[#71717A] mb-2">// thème visuel</div>
+              <h3 className="font-display font-bold text-xl tracking-tight mb-1">Couleurs & polices</h3>
+              <p className="text-sm text-[#52525B] mb-6">Personnalisez la palette et la typographie de votre site. Les changements apparaissent en direct dans l'aperçu.</p>
+              <ThemePicker
+                value={site.theme || DEFAULT_THEME}
+                onChange={(next) => setSite((s) => ({ ...s, theme: next }))}
+              />
+            </div>
+
+            {/* Ordre des sections */}
+            <div className="bg-white border border-black/10 p-6" data-testid="design-sections">
+              <div className="font-mono-grotesk text-[10px] uppercase tracking-[0.2em] text-[#71717A] mb-2">// structure de la page</div>
+              <h3 className="font-display font-bold text-xl tracking-tight mb-1">Ordre des sections</h3>
+              <p className="text-sm text-[#52525B] mb-5">Glissez-déposez pour réorganiser l'ordre des sections sur votre site (en-tête et pied de page restent fixes).</p>
+              <SectionsReorder
+                value={site.section_order || DEFAULT_SECTION_ORDER}
+                onChange={(next) => setSite((s) => ({ ...s, section_order: next }))}
+              />
             </div>
           </div>
         </TabsContent>

@@ -5,8 +5,9 @@ import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { ArrowLeft, Shield, Users, Globe, Inbox, Crown, TrendingUp, Loader2, Wand2 } from "lucide-react";
+import { ArrowLeft, Shield, Users, Globe, Inbox, Crown, TrendingUp, Loader2, Wand2, MessageSquarePlus } from "lucide-react";
 import LandingEditor from "@/components/LandingEditor";
+import ReviewsModeration from "@/components/ReviewsModeration";
 
 const StatCard = ({ icon: Icon, label, value, sublabel, accent }) => (
   <div className={`border border-black/10 p-6 ${accent ? "bg-[#09090B] text-white" : "bg-white"}`} data-testid={`stat-${label.toLowerCase().replace(/\s/g, '-')}`}>
@@ -24,6 +25,7 @@ export default function Admin() {
   const nav = useNavigate();
   const [stats, setStats] = useState(null);
   const [users, setUsers] = useState([]);
+  const [pendingCount, setPendingCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -32,8 +34,12 @@ export default function Admin() {
       nav("/dashboard");
       return;
     }
-    Promise.all([api.get("/admin/stats"), api.get("/admin/users")])
-      .then(([s, u]) => { setStats(s.data); setUsers(u.data); })
+    Promise.all([
+      api.get("/admin/stats"),
+      api.get("/admin/users"),
+      api.get("/admin/reviews/pending-count").catch(() => ({ data: { pending: 0 } })),
+    ])
+      .then(([s, u, p]) => { setStats(s.data); setUsers(u.data); setPendingCount(p.data?.pending || 0); })
       .catch((e) => toast.error(e?.response?.data?.detail || "Erreur de chargement"))
       .finally(() => setLoading(false));
   }, [user, nav]);
@@ -77,6 +83,10 @@ export default function Admin() {
             <TabsTrigger value="landing" className="rounded-none data-[state=active]:bg-[#09090B] data-[state=active]:text-white px-6 h-12" data-testid="tab-landing">
               <Wand2 className="w-3.5 h-3.5 mr-2" /> Édition Landing
             </TabsTrigger>
+            <TabsTrigger value="reviews" className="rounded-none data-[state=active]:bg-[#09090B] data-[state=active]:text-white px-6 h-12 relative" data-testid="tab-reviews">
+              <MessageSquarePlus className="w-3.5 h-3.5 mr-2" /> Modération
+              {pendingCount > 0 && <span className="ml-2 bg-[#F95A2C] text-white text-[10px] px-1.5 py-0.5 font-mono-grotesk" data-testid="pending-count-badge">{pendingCount}</span>}
+            </TabsTrigger>
             <TabsTrigger value="users" className="rounded-none data-[state=active]:bg-[#09090B] data-[state=active]:text-white px-6 h-12" data-testid="tab-users">Utilisateurs</TabsTrigger>
           </TabsList>
 
@@ -93,6 +103,11 @@ export default function Admin() {
           {/* LANDING EDITOR */}
           <TabsContent value="landing" className="mt-6">
             <LandingEditor />
+          </TabsContent>
+
+          {/* REVIEWS MODERATION */}
+          <TabsContent value="reviews" className="mt-6">
+            <ReviewsModeration />
           </TabsContent>
 
           {/* USERS */}

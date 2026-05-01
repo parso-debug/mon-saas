@@ -238,6 +238,8 @@ class SiteUpdate(BaseModel):
     slug: Optional[str] = Field(default=None, min_length=3, max_length=60)
     show_map: Optional[bool] = None
     map_address: Optional[str] = None
+    theme: Optional[Dict[str, Any]] = None  # {primary_color, accent_color, font_heading, font_body}
+    section_order: Optional[List[str]] = None  # e.g. ["hero","value_props","services","about","contact"]
 
 
 class DomainConnectIn(BaseModel):
@@ -268,6 +270,16 @@ class Lead(BaseModel):
 class CheckoutIn(BaseModel):
     package_id: str
     origin_url: str
+
+
+class ReviewIn(BaseModel):
+    author: str = Field(min_length=2, max_length=80)
+    profession: str = Field(min_length=2, max_length=60)
+    city: str = Field(min_length=2, max_length=60)
+    email: EmailStr
+    rating: int = Field(ge=1, le=5)
+    quote: str = Field(min_length=20, max_length=600)
+    avatar_url: Optional[str] = None
 
 
 # ---------- Helpers ----------
@@ -1167,6 +1179,96 @@ async def stripe_webhook(request: Request):
 @api_router.get("/")
 async def root():
     return {"service": "ArtisanWeb API", "ok": True}
+
+
+# ---------- Public reviews (user-submitted) ----------
+@api_router.post("/public/reviews")
+async def submit_review(body: ReviewIn):
+    """Public: anyone submits a review. Stored as pending until admin approves."""
+    # Rate-limit: 1 review per email per 24h
+    one_day_ago = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    recent = await db.reviews.find_one({"email": body.email.lower(), "submitted_at": {"$gt": one_day_ago}})
+    if recent:
+        raise HTTPException(status_code=429, detail="Vous avez déjà soumis un avis dans les 24 dernières heures. Merci !")
+
+    review = {
+        "id": str(uuid.uuid4()),
+        "author": body.author.strip(),
+        "profession": body.profession.strip(),
+        "city": body.city.strip(),
+        "email": body.email.lower(),
+        "rating": body.rating,
+        "quote": body.quote.strip(),
+        "avatar_url": body.avatar_url,
+        "status": "pending",
+        "submitted_at": now_iso(),
+        "moderated_at": None,
+        "moderated_by": None,
+    }
+    await db.reviews.insert_one(review)
+    return {"ok": True, "id": review["id"], "message": "Merci ! Votre avis sera publié après modération."}
+
+
+def _public_review_view(r: dict) -> dict:
+    return {
+        "id": r["id"],
+        "author": r["author"],
+        "role": f"{r['profession']} · {r['city']}",
+        "quote": r["quote"],
+        "rating": r["rating"],
+        "avatar_url": r.get("avatar_url"),
+        "date": datetime.fromisoformat(r["submitted_at"]).strftime("%d/%m/%Y") if r.get("submitted_at") else None,
+    }
+
+
+@api_router.get("/public/reviews")
+async def list_public_reviews():
+    docs = await db.reviews.find({"status": "approved"}, {"_id": 0}).sort("submitted_at", -1).to_list(200)
+    return [_public_review_view(d) for d in docs]
+
+
+# ---------- Admin reviews moderation ----------
+@api_router.get("/admin/reviews")
+async def admin_list_reviews(_admin: dict = Depends(admin_only), status_filter: str = "pending"):
+    q = {} if status_filter == "all" else {"status": status_filter}
+    docs = await db.reviews.find(q, {"_id": 0}).sort("submitted_at", -1).to_list(500)
+    return docs
+
+
+@api_router.post("/admin/reviews/{review_id}/approve")
+async def admin_approve_review(review_id: str, admin: dict = Depends(admin_only)):
+    res = await db.reviews.update_one(
+        {"id": review_id},
+        {"$set": {"status": "approved", "moderated_at": now_iso(), "moderated_by": admin["email"]}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Avis introuvable")
+    return {"ok": True}
+
+
+@api_router.post("/admin/reviews/{review_id}/reject")
+async def admin_reject_review(review_id: str, admin: dict = Depends(admin_only)):
+    res = await db.reviews.update_one(
+        {"id": review_id},
+        {"$set": {"status": "rejected", "moderated_at": now_iso(), "moderated_by": admin["email"]}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Avis introuvable")
+    return {"ok": True}
+
+
+@api_router.delete("/admin/reviews/{review_id}")
+async def admin_delete_review(review_id: str, _admin: dict = Depends(admin_only)):
+    res = await db.reviews.delete_one({"id": review_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Avis introuvable")
+    return {"deleted": True}
+
+
+@api_router.get("/admin/reviews/pending-count")
+async def admin_pending_count(_admin: dict = Depends(admin_only)):
+    count = await db.reviews.count_documents({"status": "pending"})
+    return {"pending": count}
 
 
 # ---------- Admin ----------
