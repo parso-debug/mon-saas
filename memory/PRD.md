@@ -72,12 +72,20 @@ Build a SaaS web application that auto-generates professional websites for Frenc
 - ✅ **Admin endpoint** `POST /api/admin/users/grant-pro {email, days}` pour offrir du Pro manuellement (support client, démos)
 - ✅ **Seed script** `python -m seed_demo_shop` : crée le compte `demo.pro@artisanweb.fr` / `demo1234` + boutique `/shop/la-boutique-de-demo` avec 3 produits + 1 commande d'exemple
 
+### Phase 4.1 — Shopify-light upgrade + Landing CTA (May 2026)
+- ✅ **CTA dédié sur la Landing** (`#shop`) : "Commerçant ? Votre boutique ouverte 24/7" avec preview mock 4 produits + carte commande flottante, bouton principal → `/signup?intent=shop`, bouton secondaire → démo publique
+- ✅ **Lien Boutique** dans la nav principale
+- ✅ **Signup `?intent=shop`** : redirige après register vers `/onboarding-shop` au lieu de `/onboarding` ; panneau droit adapté avec features boutique
+- ✅ **Page `/onboarding-shop`** : upsell Pro (Crown + features + CTA billing) pour free users / formulaire de création pour pro users → redirection vers /shop-builder/{id} après create
+- ✅ **Public shop upgradé** : hero sombre avec preview 4 produits, chips de catégories filtrables, badges remise (-X%) + stock bas ("Plus que N en stock") + overlay rupture de stock
+
 ## Tests
 - **iter 1 (MVP)**: 28/28 ✅
 - **iter 2 (P0+P1+P2)**: 18/19 PASS (1 XFAIL = bug confirmé)
 - **iter 3 (bug fixes)**: 8/8 PASS pour fixes ciblés ; phase2 14/14 ; iter1 26/27 (1 test coupling avec free tier limit, à fixer plus tard)
 - **iter 4 (theme + section reorder)**: 5/5 backend PASS + Playwright E2E OK (presets, fonts, DnD, save, persistance, rendu public)
 - **iter 5 (e-commerce complet)**: 29/29 backend PASS (Shops CRUD, isolation multi-tenant, Products + variantes + images, Checkout Stripe, Orders, webhook dispatch, TVA 20% inclusive) + Playwright E2E OK (catalogue → produit → variantes → panier → checkout → Stripe redirect)
+- **iter 6 (Shopify-light + Landing CTA)**: 7/7 frontend PASS (Landing CTA #shop, Signup ?intent=shop, /onboarding-shop free+pro flows, category chips, badges remise/stock, régression cart→checkout)
 
 ## Backlog
 
