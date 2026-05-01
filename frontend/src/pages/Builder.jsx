@@ -8,6 +8,7 @@ import { ArrowLeft, ExternalLink, Globe, Loader2, Inbox, Save, Phone, Mail, Copy
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ArtisanTemplate from "@/components/ArtisanTemplate";
 import ContentEditor from "@/components/ContentEditor";
+import DomainPanel from "@/components/DomainPanel";
 
 export default function Builder() {
   const { siteId } = useParams();
@@ -59,7 +60,6 @@ export default function Builder() {
         city: site.city,
         content: site.content,
         services: site.services,
-        custom_domain: site.custom_domain,
         show_map: site.show_map,
         map_address: site.map_address,
       });
@@ -158,6 +158,7 @@ export default function Builder() {
             <TabsTrigger value="preview" className="rounded-none data-[state=active]:bg-[#09090B] data-[state=active]:text-white px-5" data-testid="tab-preview">Aperçu</TabsTrigger>
             <TabsTrigger value="content" className="rounded-none data-[state=active]:bg-[#09090B] data-[state=active]:text-white px-5" data-testid="tab-content">Contenu</TabsTrigger>
             <TabsTrigger value="design" className="rounded-none data-[state=active]:bg-[#09090B] data-[state=active]:text-white px-5" data-testid="tab-design">Design</TabsTrigger>
+            <TabsTrigger value="domain" className="rounded-none data-[state=active]:bg-[#09090B] data-[state=active]:text-white px-5" data-testid="tab-domain">URL & Domaine</TabsTrigger>
             <TabsTrigger value="settings" className="rounded-none data-[state=active]:bg-[#09090B] data-[state=active]:text-white px-5" data-testid="tab-settings">Paramètres</TabsTrigger>
             <TabsTrigger value="leads" className="rounded-none data-[state=active]:bg-[#09090B] data-[state=active]:text-white px-5" data-testid="tab-leads">
               Leads <span className="ml-2 bg-[#F95A2C] text-white text-[10px] px-1.5 py-0.5 font-mono-grotesk">{leads.length}</span>
@@ -257,6 +258,11 @@ export default function Builder() {
           </div>
         </TabsContent>
 
+        {/* DOMAIN */}
+        <TabsContent value="domain" className="m-0">
+          <DomainPanel site={site} setSite={setSite} />
+        </TabsContent>
+
         {/* SETTINGS */}
         <TabsContent value="settings" className="m-0">
           <div className="max-w-3xl mx-auto px-6 py-12">
@@ -281,26 +287,6 @@ export default function Builder() {
                 <Input data-testid="settings-email" value={site.email || ""} onChange={(e) => updateField("email", e.target.value)} className="h-12 rounded-none border-black/20" placeholder="contact@votre-entreprise.fr" />
               </div>
 
-              {/* Custom domain (Pro feature) */}
-              <div className="pt-4 border-t border-black/10">
-                <div className="flex items-center justify-between mb-2">
-                  <label className="font-mono-grotesk text-[10px] uppercase tracking-[0.2em] text-[#71717A]">Domaine personnalisé</label>
-                  <span className="font-mono-grotesk text-[10px] uppercase tracking-[0.2em] bg-[#F95A2C] text-white px-2 py-0.5">PRO</span>
-                </div>
-                <Input data-testid="settings-custom-domain" value={site.custom_domain || ""} onChange={(e) => updateField("custom_domain", e.target.value)} className="h-12 rounded-none border-black/20" placeholder="ex: dupont-renovation.fr" />
-                {site.custom_domain && (
-                  <div className="mt-3 bg-[#FAFAFA] border border-black/10 p-4 text-sm">
-                    <div className="font-display font-bold mb-2">Configuration DNS requise</div>
-                    <p className="text-[#52525B] mb-3">Chez votre registrar (OVH, Gandi, IONOS...), ajoutez ces enregistrements :</p>
-                    <div className="font-mono-grotesk text-xs bg-white border border-black/10 p-3 space-y-1">
-                      <div><span className="text-[#71717A]">Type:</span> CNAME &nbsp;<span className="text-[#71717A]">Hôte:</span> www &nbsp;<span className="text-[#71717A]">Cible:</span> sites.artisanweb.app</div>
-                      <div><span className="text-[#71717A]">Type:</span> A &nbsp;<span className="text-[#71717A]">Hôte:</span> @ &nbsp;<span className="text-[#71717A]">Cible:</span> 76.76.21.21</div>
-                    </div>
-                    <p className="text-xs text-[#71717A] mt-2">La propagation DNS peut prendre jusqu'à 48h.</p>
-                  </div>
-                )}
-              </div>
-
               {/* Google Maps */}
               <div className="pt-4 border-t border-black/10">
                 <div className="flex items-center justify-between mb-2">
@@ -313,6 +299,13 @@ export default function Builder() {
                 {site.show_map && (
                   <Input data-testid="settings-map-address" value={site.map_address || ""} onChange={(e) => updateField("map_address", e.target.value)} className="h-12 rounded-none border-black/20" placeholder={`ex: 12 rue Lafayette, ${site.city}`} />
                 )}
+              </div>
+
+              <div className="pt-4 border-t border-black/10 flex items-center justify-between text-sm">
+                <span className="text-[#52525B]">URL du site, sous-domaine ou domaine personnalisé</span>
+                <button onClick={() => document.querySelector('[data-testid="tab-domain"]')?.click()} className="text-[#F95A2C] underline underline-offset-4 hover:text-[#09090B]" data-testid="settings-go-to-domain">
+                  Onglet "URL & Domaine" →
+                </button>
               </div>
 
               <div className="pt-4 border-t border-black/10 grid grid-cols-3 gap-4 text-center">

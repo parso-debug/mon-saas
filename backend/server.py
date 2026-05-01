@@ -2,7 +2,7 @@
 ArtisanWeb SaaS - Website-as-a-Service backend
 FastAPI + MongoDB + JWT auth + Claude Sonnet 4.5 (content) + Gemini Nano Banana (images)
 """
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, UploadFile, File, Form
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -22,6 +22,9 @@ import bcrypt
 import jwt as pyjwt
 import resend
 import requests as rq
+import secrets as _secrets
+import dns.resolver
+import dns.exception
 
 from emergentintegrations.llm.chat import LlmChat, UserMessage
 from emergentintegrations.payments.stripe.checkout import StripeCheckout, CheckoutSessionRequest
@@ -146,6 +149,7 @@ class UserPublic(BaseModel):
     email: EmailStr
     full_name: str
     created_at: str
+    is_admin: bool = False
 
 
 class RegisterIn(BaseModel):
@@ -224,9 +228,17 @@ class SiteUpdate(BaseModel):
     hero_image_url: Optional[str] = None
     logo_url: Optional[str] = None
     style: Optional[str] = None
-    custom_domain: Optional[str] = None
+    slug: Optional[str] = Field(default=None, min_length=3, max_length=60)
     show_map: Optional[bool] = None
     map_address: Optional[str] = None
+
+
+class DomainConnectIn(BaseModel):
+    domain: str = Field(min_length=4, max_length=253)
+
+
+class SlugCheckIn(BaseModel):
+    slug: str = Field(min_length=3, max_length=60)
 
 
 class LeadIn(BaseModel):
@@ -300,6 +312,43 @@ def slugify(text: str) -> str:
     s = re.sub(r"[ç]", "c", s)
     s = re.sub(r"[^a-z0-9]+", "-", s).strip("-")
     return s[:60] or "site"
+
+
+SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{1,58}[a-z0-9])?$")
+RESERVED_SLUGS = {
+    "api", "admin", "dashboard", "billing", "login", "signup", "site",
+    "onboarding", "generating", "builder", "auth", "public", "files",
+    "webhook", "static", "assets", "support", "help", "pricing", "about",
+    "contact", "legal", "terms", "privacy", "blog", "www", "app",
+}
+
+
+def validate_slug(slug: str) -> str:
+    """Returns normalized slug or raises HTTPException 400."""
+    s = (slug or "").strip().lower()
+    if not SLUG_RE.match(s):
+        raise HTTPException(
+            status_code=400,
+            detail="URL invalide : utilisez 3 à 60 caractères, lettres minuscules, chiffres et tirets uniquement (pas de tiret au début ou à la fin).",
+        )
+    if s in RESERVED_SLUGS:
+        raise HTTPException(status_code=400, detail="Cette URL est réservée. Choisissez-en une autre.")
+    return s
+
+
+DOMAIN_RE = re.compile(r"^(?!-)(?:[a-z0-9-]{1,63}(?<!-)\.)+[a-z]{2,}$")
+
+
+def validate_domain(domain: str) -> str:
+    d = (domain or "").strip().lower().rstrip(".")
+    # Strip protocol if user pasted full URL
+    d = re.sub(r"^https?://", "", d)
+    d = d.split("/")[0]
+    if not DOMAIN_RE.match(d):
+        raise HTTPException(status_code=400, detail="Nom de domaine invalide. Exemple attendu : votre-entreprise.fr")
+    if len(d) > 253:
+        raise HTTPException(status_code=400, detail="Nom de domaine trop long.")
+    return d
 
 
 async def unique_slug(base: str) -> str:
@@ -663,11 +712,36 @@ async def update_site(site_id: str, body: SiteUpdate, user: dict = Depends(curre
     site = await db.sites.find_one({"id": site_id, "user_id": user["id"]})
     if not site:
         raise HTTPException(status_code=404, detail="Site introuvable")
+
     update = {k: v for k, v in body.model_dump().items() if v is not None}
+
+    # Slug change: validate format + uniqueness (any user)
+    if "slug" in update:
+        new_slug = validate_slug(update["slug"])
+        if new_slug != site.get("slug"):
+            existing = await db.sites.find_one({"slug": new_slug, "id": {"$ne": site_id}}, {"_id": 0, "id": 1})
+            if existing:
+                raise HTTPException(status_code=409, detail="Cette URL est déjà utilisée. Choisissez-en une autre.")
+        update["slug"] = new_slug
+
     update["updated_at"] = now_iso()
     await db.sites.update_one({"id": site_id}, {"$set": update})
     updated = await db.sites.find_one({"id": site_id}, {"_id": 0})
     return updated
+
+
+@api_router.post("/sites/check-slug")
+async def check_slug(body: SlugCheckIn, user: dict = Depends(current_user)):
+    """Check slug availability before saving. Returns {available: bool, normalized: str}."""
+    try:
+        normalized = validate_slug(body.slug)
+    except HTTPException as e:
+        return {"available": False, "reason": e.detail, "normalized": None}
+    existing = await db.sites.find_one({"slug": normalized}, {"_id": 0, "id": 1, "user_id": 1})
+    # Allow if slug is already on a site owned by current user (idempotent check)
+    if existing and existing.get("user_id") != user["id"]:
+        return {"available": False, "reason": "URL déjà utilisée par un autre site", "normalized": normalized}
+    return {"available": True, "normalized": normalized}
 
 
 @api_router.post("/sites/{site_id}/publish")
@@ -720,14 +794,146 @@ async def regenerate_hero(site_id: str, user: dict = Depends(current_user)):
     return {"hero_image_url": hero}
 
 
+# ---------- Custom Domain (Pro only) ----------
+@api_router.post("/sites/{site_id}/domain/connect")
+async def domain_connect(site_id: str, body: DomainConnectIn, user: dict = Depends(current_user)):
+    """Reserve a custom domain for the site. Pro only. Returns DNS verification instructions."""
+    if not await is_pro(user):
+        raise HTTPException(status_code=402, detail="Le domaine personnalisé est réservé au plan Pro.")
+    site = await db.sites.find_one({"id": site_id, "user_id": user["id"]})
+    if not site:
+        raise HTTPException(status_code=404, detail="Site introuvable")
+
+    domain = validate_domain(body.domain)
+
+    # Domain unique across all sites
+    existing = await db.sites.find_one({"custom_domain": domain, "id": {"$ne": site_id}}, {"_id": 0, "id": 1})
+    if existing:
+        raise HTTPException(status_code=409, detail="Ce domaine est déjà connecté à un autre site.")
+
+    token = _secrets.token_urlsafe(16)
+    update = {
+        "custom_domain": domain,
+        "domain_token": token,
+        "domain_verified": False,
+        "domain_verified_at": None,
+        "domain_connected_at": now_iso(),
+        "updated_at": now_iso(),
+    }
+    await db.sites.update_one({"id": site_id}, {"$set": update})
+
+    return {
+        "domain": domain,
+        "verified": False,
+        "instructions": {
+            "txt_record": {
+                "type": "TXT",
+                "name": f"_artisanweb-verify.{domain}",
+                "value": token,
+                "purpose": "Vérification de propriété (obligatoire)",
+            },
+            "a_record": {
+                "type": "A",
+                "name": "@",
+                "value": "76.76.21.21",
+                "purpose": "Pointer le domaine racine vers nos serveurs",
+            },
+            "cname_record": {
+                "type": "CNAME",
+                "name": "www",
+                "value": "sites.artisanweb.app",
+                "purpose": "Pointer le sous-domaine www",
+            },
+            "note": "Ajoutez ces 3 enregistrements chez votre registrar (OVH, Gandi, IONOS...). La propagation peut prendre jusqu'à 48h.",
+        },
+    }
+
+
+def _lookup_txt_record(name: str) -> List[str]:
+    """Synchronous DNS TXT lookup. Returns list of TXT strings or [] on error."""
+    try:
+        resolver = dns.resolver.Resolver()
+        resolver.timeout = 5
+        resolver.lifetime = 8
+        answers = resolver.resolve(name, "TXT")
+        out = []
+        for r in answers:
+            try:
+                strings = b"".join(r.strings).decode("utf-8", errors="ignore")
+            except Exception:
+                strings = str(r)
+            out.append(strings.strip().strip('"'))
+        return out
+    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.exception.DNSException):
+        return []
+    except Exception as e:
+        logger.warning(f"DNS lookup error for {name}: {e}")
+        return []
+
+
+@api_router.post("/sites/{site_id}/domain/verify")
+async def domain_verify(site_id: str, user: dict = Depends(current_user)):
+    """Verify the custom domain by checking the TXT record. Returns verified=True if matches."""
+    site = await db.sites.find_one({"id": site_id, "user_id": user["id"]})
+    if not site:
+        raise HTTPException(status_code=404, detail="Site introuvable")
+    domain = site.get("custom_domain")
+    token = site.get("domain_token")
+    if not domain or not token:
+        raise HTTPException(status_code=400, detail="Aucun domaine connecté. Connectez d'abord un domaine.")
+
+    txt_name = f"_artisanweb-verify.{domain}"
+    records = await asyncio.to_thread(_lookup_txt_record, txt_name)
+    matched = any(token in rec for rec in records)
+
+    update = {"updated_at": now_iso()}
+    if matched:
+        update["domain_verified"] = True
+        update["domain_verified_at"] = now_iso()
+        await db.sites.update_one({"id": site_id}, {"$set": update})
+        return {"verified": True, "domain": domain, "checked_records": records}
+    return {
+        "verified": False,
+        "domain": domain,
+        "expected_token": token,
+        "checked_record_name": txt_name,
+        "checked_records": records,
+        "hint": "Le DNS n'est pas encore propagé ou le TXT record n'est pas correct. Réessayez dans quelques minutes." if not records else "Le record TXT existe mais ne contient pas le bon token. Vérifiez la valeur copiée.",
+    }
+
+
+@api_router.delete("/sites/{site_id}/domain")
+async def domain_disconnect(site_id: str, user: dict = Depends(current_user)):
+    site = await db.sites.find_one({"id": site_id, "user_id": user["id"]})
+    if not site:
+        raise HTTPException(status_code=404, detail="Site introuvable")
+    await db.sites.update_one({"id": site_id}, {"$unset": {
+        "custom_domain": "", "domain_token": "", "domain_verified": "",
+        "domain_verified_at": "", "domain_connected_at": "",
+    }, "$set": {"updated_at": now_iso()}})
+    return {"disconnected": True}
+
+
 # ---------- Public site (no auth) ----------
+@api_router.get("/public/sites/by-domain/{domain}")
+async def public_site_by_domain(domain: str):
+    d = domain.strip().lower()
+    site = await db.sites.find_one({"custom_domain": d, "domain_verified": True}, {"_id": 0})
+    if not site:
+        raise HTTPException(status_code=404, detail="Site introuvable")
+    site.pop("user_id", None)
+    site.pop("domain_token", None)
+    return site
+
+
 @api_router.get("/public/sites/{slug}")
 async def public_site(slug: str):
     site = await db.sites.find_one({"slug": slug}, {"_id": 0})
     if not site:
         raise HTTPException(status_code=404, detail="Site introuvable")
-    # Don't expose user_id
+    # Don't expose user_id or sensitive domain token
     site.pop("user_id", None)
+    site.pop("domain_token", None)
     return site
 
 
