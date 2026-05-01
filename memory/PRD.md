@@ -58,11 +58,24 @@ Build a SaaS web application that auto-generates professional websites for Frenc
 - ✅ `theme` (primary_color, accent_color, font_heading, font_body) et `section_order` persistés via PUT /api/sites/{id}
 - ✅ Rendu live dans l'aperçu builder + sur le site public via `<style>` injecté ciblant les classes Tailwind arbitraires
 
+### Phase 4 — E-commerce (May 2026)
+- ✅ Back-office marchand (Pro-only) `/shop-builder/:id` : onglets Produits / Commandes / Livraison / Paramètres
+- ✅ CRUD Shop / Product / Order (MongoDB `shops`, `products`, `orders`)
+- ✅ Produits avec photos (Object Storage via POST /api/shops/{id}/upload-image), variantes simples ({name, options}), stock, catégorie, prix barré
+- ✅ Tarifs de livraison configurables (défaut: Retrait boutique gratuit / France métro 4,90€ / UE 9,90€)
+- ✅ TVA 20% incluse par défaut, modifiable par marchand
+- ✅ Public storefront `/shop/:slug` (catalogue + /product/:pslug + cart drawer localStorage + checkout + success)
+- ✅ Checkout Stripe : POST /api/public/shops/{slug}/checkout → session Stripe + Order(status=pending)
+- ✅ Webhook /api/webhook/stripe dispatché vers `_apply_shop_order_if_paid` (idempotent, décrément stock, emails Resend client + propriétaire)
+- ✅ Pro gating : free user reçoit 402, redirection vers /billing
+- ✅ Multi-tenant isolation (user A ne voit pas shops/products/orders de user B — 29/29 tests pytest)
+
 ## Tests
 - **iter 1 (MVP)**: 28/28 ✅
 - **iter 2 (P0+P1+P2)**: 18/19 PASS (1 XFAIL = bug confirmé)
 - **iter 3 (bug fixes)**: 8/8 PASS pour fixes ciblés ; phase2 14/14 ; iter1 26/27 (1 test coupling avec free tier limit, à fixer plus tard)
 - **iter 4 (theme + section reorder)**: 5/5 backend PASS + Playwright E2E OK (presets, fonts, DnD, save, persistance, rendu public)
+- **iter 5 (e-commerce complet)**: 29/29 backend PASS (Shops CRUD, isolation multi-tenant, Products + variantes + images, Checkout Stripe, Orders, webhook dispatch, TVA 20% inclusive) + Playwright E2E OK (catalogue → produit → variantes → panier → checkout → Stripe redirect)
 
 ## Backlog
 
