@@ -29,6 +29,8 @@ import dns.exception
 from emergentintegrations.llm.chat import LlmChat, UserMessage
 from emergentintegrations.payments.stripe.checkout import StripeCheckout, CheckoutSessionRequest
 
+from app_settings_defaults import DEFAULT_APP_SETTINGS
+
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
@@ -1168,6 +1170,54 @@ async def root():
 
 
 # ---------- Admin ----------
+def _deep_merge(base: dict, override: dict) -> dict:
+    """Deep-merge override into base. Lists are replaced (not merged)."""
+    out = dict(base) if base else {}
+    for k, v in (override or {}).items():
+        if isinstance(v, dict) and isinstance(out.get(k), dict):
+            out[k] = _deep_merge(out[k], v)
+        else:
+            out[k] = v
+    return out
+
+
+@api_router.get("/app-settings")
+async def get_app_settings():
+    """Public endpoint: marketing landing content. Falls back to defaults."""
+    doc = await db.app_settings.find_one({"id": "default"}, {"_id": 0, "id": 0})
+    return _deep_merge(DEFAULT_APP_SETTINGS, doc or {})
+
+
+@api_router.put("/admin/app-settings")
+async def update_app_settings(body: Dict[str, Any], _admin: dict = Depends(admin_only)):
+    """Admin only: replace the entire app_settings document with provided body. Idempotent upsert."""
+    update = {**body, "id": "default", "updated_at": now_iso()}
+    await db.app_settings.update_one({"id": "default"}, {"$set": update}, upsert=True)
+    fresh = await db.app_settings.find_one({"id": "default"}, {"_id": 0, "id": 0})
+    return _deep_merge(DEFAULT_APP_SETTINGS, fresh or {})
+
+
+@api_router.post("/admin/app-settings/reset")
+async def reset_app_settings(_admin: dict = Depends(admin_only)):
+    await db.app_settings.delete_one({"id": "default"})
+    return DEFAULT_APP_SETTINGS
+
+
+@api_router.post("/admin/upload")
+async def admin_upload(file: UploadFile = File(...), kind: str = Form("landing"), _admin: dict = Depends(admin_only)):
+    """Admin upload: store an image in object storage, return a URL usable in app_settings."""
+    contents = await file.read()
+    if len(contents) > 5_000_000:
+        raise HTTPException(status_code=413, detail="Fichier trop lourd (max 5 Mo)")
+    mime = file.content_type or "image/png"
+    if not mime.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Seules les images sont acceptées")
+    url = await upload_image_bytes(contents, mime, f"admin/{kind}", "platform")
+    if not url:
+        raise HTTPException(status_code=502, detail="Échec de l'upload")
+    return {"url": url}
+
+
 @api_router.get("/admin/stats")
 async def admin_stats(_admin: dict = Depends(admin_only)):
     users_count = await db.users.count_documents({})

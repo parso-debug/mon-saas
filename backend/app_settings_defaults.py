@@ -1,0 +1,112 @@
+"""Default content for the marketing landing page. Editable by admin via /api/admin/app-settings."""
+
+DEFAULT_APP_SETTINGS = {
+    "brand": {
+        "name": "artisanweb",
+        "logo_letter": "A",
+    },
+    "navbar": {
+        "items": [
+            {"label": "Comment ça marche", "href": "#how"},
+            {"label": "Fonctionnalités", "href": "#features"},
+            {"label": "Tarifs", "href": "#pricing"},
+        ],
+        "cta_login": "Se connecter",
+        "cta_signup": "Commencer",
+    },
+    "hero": {
+        "badge": "Nouveau · Génération IA en moins de 60 secondes",
+        "title_line_1": "Le site internet",
+        "title_line_2": "de votre métier,",
+        "title_italic": "généré en 5 minutes.",
+        "subtitle": "Décrivez votre activité d'artisan. Notre IA rédige le texte, optimise le SEO local et conçoit un site moderne — prêt à publier.",
+        "cta_primary": "Créer mon site gratuitement",
+        "cta_secondary": "Voir comment ça marche",
+        "trust_chips": [
+            "Sans carte bancaire",
+            "SEO local inclus",
+            "100% personnalisable",
+        ],
+        "preview_img": "https://images.pexels.com/photos/4756489/pexels-photo-4756489.jpeg",
+        "preview_business_line_1": "Maçonnerie",
+        "preview_business_line_2": "Dupont & Fils",
+        "preview_meta": "Toulouse · Depuis 1998",
+        "preview_stats": [
+            {"label": "Temps gen.", "value": "52s"},
+            {"label": "Pages", "value": "4"},
+            {"label": "SEO score", "value": "96"},
+        ],
+    },
+    "marquee_trades": [
+        "plombier", "électricien", "maçon", "peintre", "menuisier",
+        "chauffagiste", "couvreur", "carreleur", "paysagiste", "serrurier", "plâtrier",
+    ],
+    "how_it_works": {
+        "kicker": "03 étapes",
+        "title_line_1": "De l'idée au site",
+        "title_italic": "en ligne.",
+        "subtitle": "Pas de code. Pas de template à choisir. Pas d'agence. Vous remplissez un formulaire, notre IA fait le reste.",
+        "steps": [
+            {"n": "01", "title": "Décrivez votre activité", "description": "Nom, métier, services, ville, téléphone. 8 champs simples, c'est tout.", "icon": "message-square"},
+            {"n": "02", "title": "L'IA crée tout pour vous", "description": "Textes SEO, structure, images d'ambiance, arguments commerciaux. En moins d'une minute.", "icon": "wand-2"},
+            {"n": "03", "title": "Publiez & captez des clients", "description": "URL partageable, formulaire de contact intégré, leads centralisés dans votre tableau de bord.", "icon": "globe"},
+        ],
+    },
+    "features": {
+        "kicker": "stack complète",
+        "title_line_1": "Tout ce qu'il vous faut.",
+        "title_italic": "Rien de plus.",
+        "main": {
+            "icon": "sparkles",
+            "kicker": "01.feature",
+            "title_line_1": "Génération IA spécialisée",
+            "title_line_2": "artisans français.",
+            "description": "Claude Sonnet 4.5 entraîné sur des milliers de sites pro français. Textes naturels, SEO local, ton chaleureux et direct. Pas de bullshit corporate.",
+        },
+        "items": [
+            {"icon": "zap", "title": "SEO local intégré", "description": "Mots-clés ville+métier, balises optimisées, structure rich-snippets ready.", "color": "default"},
+            {"icon": "message-square", "title": "CRM léger inclus", "description": "Formulaire de contact, leads stockés et notifiés. Zéro outil externe.", "color": "accent"},
+            {"icon": "shield", "title": "Hébergement & domaine", "description": "URL partageable instantanément. Connectez votre nom de domaine en 2 clics (à venir).", "color": "default"},
+            {"icon": "globe", "title": "Mobile-first", "description": "90% de vos visiteurs viennent du mobile. Tous les sites générés sont optimisés en priorité mobile.", "color": "default"},
+        ],
+    },
+    "testimonial": {
+        "kicker": "testimonial / 01",
+        "quote": "En 5 minutes j'avais un site plus pro que ce que m'avait fait une agence à 2 400€. Trois devis demandés la première semaine.",
+        "author": "Marc D.",
+        "role": "Maçon · Toulouse",
+        "avatar_url": "https://images.pexels.com/photos/4981775/pexels-photo-4981775.jpeg",
+    },
+    "pricing": {
+        "kicker": "pricing",
+        "title_line_1": "Simple.",
+        "title_italic": "Sans surprise.",
+        "free": {
+            "label": "free",
+            "price": "0€",
+            "period": "/mois",
+            "tagline": "Pour tester en 5 min.",
+            "features": ["1 site généré", "Sous-domaine artisanweb.app", "SEO local de base", "Capture de leads"],
+            "cta": "Démarrer gratuitement",
+        },
+        "pro": {
+            "label": "pro",
+            "price": "19€",
+            "period": "/mois",
+            "tagline": "Pour les artisans sérieux.",
+            "features": ["Sites illimités", "Domaine personnalisé", "SEO boost & images IA", "Notifications email leads", "Support prioritaire"],
+            "cta": "Passer au Pro",
+            "badge": "recommandé",
+        },
+    },
+    "footer_cta": {
+        "title_line_1": "Votre site,",
+        "title_italic": "avant le café.",
+        "button_label": "Commencer gratuitement",
+    },
+    "footer": {
+        "copyright": "© 2026 artisanweb · made in france",
+        "version": "v 1.0.0",
+        "status": "status · operational",
+    },
+}
