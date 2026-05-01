@@ -69,6 +69,8 @@ Build a SaaS web application that auto-generates professional websites for Frenc
 - ✅ Webhook /api/webhook/stripe dispatché vers `_apply_shop_order_if_paid` (idempotent, décrément stock, emails Resend client + propriétaire)
 - ✅ Pro gating : free user reçoit 402, redirection vers /billing
 - ✅ Multi-tenant isolation (user A ne voit pas shops/products/orders de user B — 29/29 tests pytest)
+- ✅ **Admin endpoint** `POST /api/admin/users/grant-pro {email, days}` pour offrir du Pro manuellement (support client, démos)
+- ✅ **Seed script** `python -m seed_demo_shop` : crée le compte `demo.pro@artisanweb.fr` / `demo1234` + boutique `/shop/la-boutique-de-demo` avec 3 produits + 1 commande d'exemple
 
 ## Tests
 - **iter 1 (MVP)**: 28/28 ✅

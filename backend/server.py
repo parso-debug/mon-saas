@@ -1325,6 +1325,33 @@ async def admin_upload(file: UploadFile = File(...), kind: str = Form("landing")
     return {"url": url}
 
 
+class AdminGrantProIn(BaseModel):
+    email: EmailStr
+    days: int = Field(default=30, ge=1, le=3650)
+
+
+@api_router.post("/admin/users/grant-pro")
+async def admin_grant_pro(body: AdminGrantProIn, _admin: dict = Depends(admin_only)):
+    """Admin-only: grant Pro status to a user for N days (additive if already Pro).
+    Useful for manual testing, demo accounts or customer support.
+    """
+    user = await db.users.find_one({"email": body.email.lower()})
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    now = datetime.now(timezone.utc)
+    current = user.get("pro_until")
+    try:
+        base = datetime.fromisoformat(current) if current else now
+        if base < now:
+            base = now
+    except Exception:
+        base = now
+    new_until = (base + timedelta(days=body.days)).isoformat()
+    await db.users.update_one({"id": user["id"]}, {"$set": {"pro_until": new_until}})
+    return {"ok": True, "email": user["email"], "pro_until": new_until}
+
+
+
 @api_router.get("/admin/stats")
 async def admin_stats(_admin: dict = Depends(admin_only)):
     users_count = await db.users.count_documents({})
