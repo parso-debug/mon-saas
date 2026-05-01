@@ -199,20 +199,64 @@ export default function Landing() {
 
       {/* TESTIMONIAL */}
       <section className="py-24 md:py-32 px-6 md:px-12 max-w-7xl mx-auto">
-        <div className="border border-black/10 bg-white p-10 md:p-16 grid md:grid-cols-12 gap-8 items-center">
-          <div className="md:col-span-3">
-            {testimonial.avatar_url && <img src={resolveImg(testimonial.avatar_url)} alt={testimonial.author} className="w-full aspect-square object-cover grayscale" />}
-          </div>
-          <div className="md:col-span-9">
-            {testimonial.kicker && <div className="font-mono-grotesk text-[10px] uppercase tracking-[0.2em] text-[#71717A] mb-4">// {testimonial.kicker}</div>}
-            <p className="font-serif-instrument text-3xl md:text-4xl leading-tight italic mb-6">« {testimonial.quote} »</p>
-            <div className="flex items-center gap-3">
-              <div className="font-display font-bold">{testimonial.author}</div>
-              <div className="w-1 h-1 bg-black rounded-full" />
-              <div className="text-sm text-[#71717A]">{testimonial.role}</div>
-            </div>
-          </div>
-        </div>
+        {(() => {
+          const list = (s.testimonials && s.testimonials.length > 0) ? s.testimonials : (testimonial && testimonial.author ? [testimonial] : []);
+          const ts = s.testimonials_section || {};
+          const showCount = Math.max(1, Math.min(ts.show_count || 1, list.length));
+          const featured = list.slice(0, showCount);
+          if (featured.length === 0) return null;
+          return (
+            <>
+              {(ts.title_line_1 || ts.title_italic) && (
+                <div className="grid md:grid-cols-12 gap-8 mb-12 items-end">
+                  <div className="md:col-span-7">
+                    {ts.kicker && <div className="font-mono-grotesk text-[10px] uppercase tracking-[0.2em] text-[#71717A] mb-3">// {ts.kicker}</div>}
+                    <h2 className="font-display font-bold text-4xl md:text-5xl tracking-tight leading-tight">
+                      {ts.title_line_1} <span className="italic font-serif-instrument font-normal">{ts.title_italic}</span>
+                    </h2>
+                  </div>
+                </div>
+              )}
+              <div className="space-y-4">
+                {featured.map((t, i) => (
+                  <div key={i} className="border border-black/10 bg-white p-10 md:p-16 grid md:grid-cols-12 gap-8 items-center" data-testid={`testimonial-card-${i}`}>
+                    <div className="md:col-span-3">
+                      {t.avatar_url && <img src={resolveImg(t.avatar_url)} alt={t.author} className="w-full aspect-square object-cover grayscale" />}
+                    </div>
+                    <div className="md:col-span-9">
+                      <div className="flex items-center gap-3 mb-4 flex-wrap">
+                        {t.kicker && <div className="font-mono-grotesk text-[10px] uppercase tracking-[0.2em] text-[#71717A]">// {t.kicker}</div>}
+                        {t.rating && (
+                          <div className="flex items-center gap-0.5">
+                            {Array.from({ length: 5 }).map((_, j) => (
+                              <svg key={j} className={`w-3.5 h-3.5 ${j < t.rating ? "fill-[#F95A2C] text-[#F95A2C]" : "fill-black/10 text-black/10"}`} viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>
+                            ))}
+                          </div>
+                        )}
+                        {t.date && <span className="font-mono-grotesk text-[10px] uppercase tracking-[0.2em] text-[#71717A]">{t.date}</span>}
+                      </div>
+                      <p className="font-serif-instrument text-3xl md:text-4xl leading-tight italic mb-6">« {t.quote} »</p>
+                      <div className="flex items-center gap-3">
+                        <div className="font-display font-bold">{t.author}</div>
+                        <div className="w-1 h-1 bg-black rounded-full" />
+                        <div className="text-sm text-[#71717A]">{t.role}</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {list.length > showCount && (
+                <div className="mt-8 flex justify-center">
+                  <Link to="/avis">
+                    <Button size="lg" variant="outline" className="rounded-none h-14 px-8 border-black hover:bg-black hover:text-white" data-testid="see-all-reviews-cta">
+                      {ts.cta_label || "Voir tous les avis"} ({list.length}) <ArrowRight className="ml-2 w-4 h-4" />
+                    </Button>
+                  </Link>
+                </div>
+              )}
+            </>
+          );
+        })()}
       </section>
 
       {/* PRICING */}

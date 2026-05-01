@@ -16,6 +16,7 @@ import Billing from "@/pages/Billing";
 import BillingSuccess from "@/pages/BillingSuccess";
 import BillingCancel from "@/pages/BillingCancel";
 import Admin from "@/pages/Admin";
+import Avis from "@/pages/Avis";
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
@@ -33,6 +34,7 @@ export default function App() {
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
+          <Route path="/avis" element={<Avis />} />
           <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />
           <Route path="/onboarding" element={<Protected><Onboarding /></Protected>} />
           <Route path="/generating" element={<Protected><Generating /></Protected>} />

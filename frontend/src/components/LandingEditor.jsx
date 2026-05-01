@@ -138,6 +138,8 @@ export default function LandingEditor() {
   const feat = s.features || {};
   const featMain = feat.main || {};
   const test = s.testimonial || {};
+  const testimonialsList = s.testimonials || [];
+  const testimonialsSection = s.testimonials_section || {};
   const pricing = s.pricing || {};
   const free = pricing.free || {};
   const pro = pricing.pro || {};
@@ -319,9 +321,51 @@ export default function LandingEditor() {
           </AccordionContent>
         </AccordionItem>
 
-        {/* TESTIMONIAL */}
+        {/* TESTIMONIALS */}
+        <AccordionItem value="testimonials" className="bg-white border border-black/10">
+          <AccordionTrigger className="px-6 hover:no-underline"><SectionHeader title="Témoignages clients" subtitle={`${testimonialsList.length} avis · page /avis`} /></AccordionTrigger>
+          <AccordionContent className="px-6 pb-6 space-y-4">
+            {/* Section meta */}
+            <div className="border border-black/10 bg-[#FAFAFA] p-4 space-y-3">
+              <div className="font-display font-bold text-sm">Réglages section landing</div>
+              <div className="grid md:grid-cols-3 gap-3">
+                <Field label="Kicker"><Input value={testimonialsSection.kicker || ""} onChange={(e) => set("testimonials_section.kicker", e.target.value)} className="h-10 rounded-none border-black/20" /></Field>
+                <Field label="Titre · ligne 1"><Input value={testimonialsSection.title_line_1 || ""} onChange={(e) => set("testimonials_section.title_line_1", e.target.value)} className="h-10 rounded-none border-black/20" /></Field>
+                <Field label="Titre · italique"><Input value={testimonialsSection.title_italic || ""} onChange={(e) => set("testimonials_section.title_italic", e.target.value)} className="h-10 rounded-none border-black/20" /></Field>
+              </div>
+              <div className="grid md:grid-cols-2 gap-3">
+                <Field label="Nb. d'avis vedettes sur la landing">
+                  <Input type="number" min={1} max={5} value={testimonialsSection.show_count || 1} onChange={(e) => set("testimonials_section.show_count", parseInt(e.target.value || "1", 10))} className="h-10 rounded-none border-black/20" />
+                </Field>
+                <Field label="Texte du bouton 'Voir tous les avis'"><Input value={testimonialsSection.cta_label || ""} onChange={(e) => set("testimonials_section.cta_label", e.target.value)} className="h-10 rounded-none border-black/20" /></Field>
+              </div>
+            </div>
+            {/* Items */}
+            {testimonialsList.map((t, i) => (
+              <div key={i} className="border border-black/10 p-4 relative" data-testid={`testimonial-item-${i}`}>
+                <button onClick={() => set("testimonials", testimonialsList.filter((_, j) => j !== i))} className="absolute top-3 right-3 text-[#71717A] hover:text-red-600"><X className="w-4 h-4" /></button>
+                <div className="font-mono-grotesk text-[10px] uppercase tracking-[0.2em] text-[#71717A] mb-3">// avis · {String(i + 1).padStart(2, "0")}</div>
+                <Field label="Citation (sans guillemets)"><Textarea rows={3} value={t.quote || ""} onChange={(e) => { const a = [...testimonialsList]; a[i] = { ...a[i], quote: e.target.value }; set("testimonials", a); }} className="rounded-none border-black/20" /></Field>
+                <div className="grid md:grid-cols-12 gap-3 mt-3">
+                  <div className="md:col-span-5"><Field label="Auteur"><Input value={t.author || ""} onChange={(e) => { const a = [...testimonialsList]; a[i] = { ...a[i], author: e.target.value }; set("testimonials", a); }} className="h-10 rounded-none border-black/20" /></Field></div>
+                  <div className="md:col-span-4"><Field label="Métier · Ville"><Input value={t.role || ""} onChange={(e) => { const a = [...testimonialsList]; a[i] = { ...a[i], role: e.target.value }; set("testimonials", a); }} className="h-10 rounded-none border-black/20" placeholder="Ex: Plombier · Bordeaux" /></Field></div>
+                  <div className="md:col-span-2"><Field label="Date" hint="JJ/MM/AAAA"><Input value={t.date || ""} onChange={(e) => { const a = [...testimonialsList]; a[i] = { ...a[i], date: e.target.value }; set("testimonials", a); }} className="h-10 rounded-none border-black/20 font-mono-grotesk text-xs" placeholder="29/04/2026" /></Field></div>
+                  <div className="md:col-span-1"><Field label="Note">
+                    <Input type="number" min={1} max={5} value={t.rating ?? 5} onChange={(e) => { const a = [...testimonialsList]; a[i] = { ...a[i], rating: parseInt(e.target.value || "5", 10) }; set("testimonials", a); }} className="h-10 rounded-none border-black/20 text-center" />
+                  </Field></div>
+                </div>
+                <div className="mt-3"><Field label="Photo"><ImagePicker value={t.avatar_url} onChange={(v) => { const a = [...testimonialsList]; a[i] = { ...a[i], avatar_url: v }; set("testimonials", a); }} kind="testimonial" /></Field></div>
+              </div>
+            ))}
+            <Button onClick={() => set("testimonials", [...testimonialsList, { quote: "Nouveau témoignage...", author: "Prénom N.", role: "Métier · Ville", date: new Date().toLocaleDateString("fr-FR"), rating: 5, avatar_url: "" }])} variant="outline" size="sm" className="rounded-none border-black/20" data-testid="add-testimonial">
+              <Plus className="w-3.5 h-3.5 mr-2" /> Ajouter un témoignage
+            </Button>
+          </AccordionContent>
+        </AccordionItem>
+
+        {/* TESTIMONIAL (legacy single) */}
         <AccordionItem value="testimonial" className="bg-white border border-black/10">
-          <AccordionTrigger className="px-6 hover:no-underline"><SectionHeader title="Témoignage client" subtitle={test.author} /></AccordionTrigger>
+          <AccordionTrigger className="px-6 hover:no-underline"><SectionHeader title="Témoignage (legacy unique)" subtitle="Utilisé uniquement si la liste 'Témoignages clients' est vide" /></AccordionTrigger>
           <AccordionContent className="px-6 pb-6 space-y-4">
             <Field label="Kicker"><Input value={test.kicker || ""} onChange={(e) => set("testimonial.kicker", e.target.value)} className="h-11 rounded-none border-black/20" /></Field>
             <Field label="Citation (sans guillemets)"><Textarea rows={3} value={test.quote || ""} onChange={(e) => set("testimonial.quote", e.target.value)} className="rounded-none border-black/20" data-testid="testimonial-quote" /></Field>
