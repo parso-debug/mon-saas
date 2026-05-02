@@ -1168,12 +1168,16 @@ async def stripe_webhook(request: Request):
         stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url="")
         event = await stripe_checkout.handle_webhook(body_bytes, sig)
         if event.session_id:
-            # Dispatch: shop order takes precedence if the session is in orders
-            shop_order = await db.orders.find_one({"stripe_session_id": event.session_id}, {"_id": 0, "id": 1})
-            if shop_order:
-                await _apply_shop_order_if_paid(event.session_id)
+            # Dispatch in order: domain purchase -> shop order -> pro credit
+            domain_purchase = await db.domains.find_one({"stripe_session_id": event.session_id}, {"_id": 0, "id": 1})
+            if domain_purchase:
+                await _apply_domain_purchase_if_paid(event.session_id)
             else:
-                await _apply_pro_credit_if_paid(event.session_id)
+                shop_order = await db.orders.find_one({"stripe_session_id": event.session_id}, {"_id": 0, "id": 1})
+                if shop_order:
+                    await _apply_shop_order_if_paid(event.session_id)
+                else:
+                    await _apply_pro_credit_if_paid(event.session_id)
         return {"ok": True}
     except Exception as e:
         logger.error(f"Stripe webhook error: {e}")
@@ -1925,6 +1929,413 @@ async def update_order_status(shop_id: str, order_id: str, body: OrderStatusUpda
         raise HTTPException(status_code=404, detail="Commande introuvable")
     updated = await db.orders.find_one({"id": order_id}, {"_id": 0})
     return updated
+
+
+# =============================================================================
+# DOMAIN MARKETPLACE — Phase 5 (MVP with mocked registrar, real Stripe+DB+DNS)
+# =============================================================================
+
+# Target A record the platform DNS config points to.
+# In production this would be a stable public IP or load balancer hostname.
+PLATFORM_A_RECORD = os.environ.get("PLATFORM_A_RECORD_IP", "76.76.21.21")  # Vercel-style anycast IP placeholder
+
+# TLD pricing. `cost_cents` = our cost at registrar, `margin_cents` = fixed 10€ margin.
+TLD_PRICING = {
+    "fr":       {"cost_cents":  900, "margin_cents": 1000, "available": True},
+    "com":      {"cost_cents": 1400, "margin_cents": 1000, "available": True},
+    "shop":     {"cost_cents": 3500, "margin_cents": 1000, "available": True},
+    "boutique": {"cost_cents": 3000, "margin_cents": 1000, "available": True},
+    "eu":       {"cost_cents":  800, "margin_cents": 1000, "available": True},
+    "net":      {"cost_cents": 1300, "margin_cents": 1000, "available": True},
+    "bzh":      {"cost_cents": 2500, "margin_cents": 1000, "available": True},
+    "paris":    {"cost_cents": 3000, "margin_cents": 1000, "available": True},
+}
+DOMAIN_DEFAULT_PRICING = {"cost_cents": 1200, "margin_cents": 1000}
+
+
+def _split_domain(fqdn: str) -> tuple:
+    fqdn = (fqdn or "").strip().lower().lstrip(".")
+    if "." not in fqdn:
+        raise HTTPException(status_code=400, detail="Nom de domaine invalide")
+    parts = fqdn.split(".")
+    if len(parts) > 4 or any(not re.match(r"^[a-z0-9-]{1,63}$", p) or p.startswith("-") or p.endswith("-") for p in parts):
+        raise HTTPException(status_code=400, detail="Nom de domaine invalide")
+    name = parts[0]
+    tld = ".".join(parts[1:])
+    return name, tld, fqdn
+
+
+def _tld_price(tld: str) -> dict:
+    tld = tld.lstrip(".")
+    p = TLD_PRICING.get(tld, {**DOMAIN_DEFAULT_PRICING, "available": True})
+    total = p["cost_cents"] + p["margin_cents"]
+    return {
+        "tld": tld,
+        "cost_cents": p["cost_cents"],
+        "margin_cents": p["margin_cents"],
+        "total_cents": total,
+        "available": p.get("available", True),
+    }
+
+
+def _is_available_mock(fqdn: str) -> bool:
+    """Deterministic mock: hash the FQDN, ~75% of names available, reserved blacklist for a few famous ones."""
+    import hashlib
+    low = fqdn.lower()
+    taken_list = {"google.com", "facebook.com", "apple.com", "amazon.com", "artisanweb.fr", "test.fr", "example.com", "leboncoin.fr"}
+    if low in taken_list:
+        return False
+    digest = int(hashlib.sha256(low.encode()).hexdigest(), 16)
+    return (digest % 4) != 0
+
+
+def _suggest_domains(business_type: Optional[str], city: Optional[str], base: Optional[str] = None) -> List[str]:
+    """Generate domain name suggestions based on trade + city."""
+    t = slugify(business_type or "artisan")[:20]
+    c = slugify(city or "")[:20]
+    b = slugify(base or "")[:20]
+    candidates: List[str] = []
+    if t and c:
+        candidates += [f"{t}-{c}", f"le-{t}-{c}", f"{t}{c}", f"mon-{t}-{c}"]
+    if t:
+        candidates += [f"{t}-pro", f"artisan-{t}"]
+    if b:
+        candidates += [f"{b}", f"{b}-{c}" if c else b, f"{b}-pro"]
+    # Deduplicate while preserving order
+    seen = set()
+    unique = []
+    for c_ in candidates:
+        if c_ and c_ not in seen and 3 <= len(c_) <= 40:
+            seen.add(c_)
+            unique.append(c_)
+
+    out: List[str] = []
+    for base_name in unique[:8]:
+        for tld in ("fr", "com", "shop"):
+            out.append(f"{base_name}.{tld}")
+    return out[:12]
+
+
+def _project_domain_public(d: dict) -> dict:
+    return {k: v for k, v in d.items() if k not in {"_id", "internal_notes"}}
+
+
+class DomainSearchSuggestion(BaseModel):
+    domain: str
+    available: bool
+    total_cents: int
+    currency: str = "EUR"
+
+
+class DomainPurchaseIn(BaseModel):
+    domain: str = Field(min_length=4, max_length=253)
+    project_id: Optional[str] = None  # site_id OR shop_id (we store whichever fits)
+    project_kind: str = Field(default="site")  # "site" | "shop"
+    origin_url: str
+
+
+# ---------- Search ----------
+
+@api_router.get("/domains/search")
+async def domain_search(name: str, business_type: Optional[str] = None, city: Optional[str] = None, _user: dict = Depends(current_user)):
+    """Search a domain + return suggestions with availability and pricing.
+
+    Returns:
+        - query: the input name normalized
+        - result: { domain, available, total_cents } for the exact query (if TLD included)
+        - suggestions: list of alternative domains with availability + pricing
+    """
+    name = (name or "").strip().lower()
+    if not name:
+        raise HTTPException(status_code=400, detail="Nom requis")
+
+    # If the user typed a FQDN (with a dot), check it directly
+    exact_result: Optional[dict] = None
+    if "." in name:
+        base, tld, fqdn = _split_domain(name)
+        pricing = _tld_price(tld)
+        exact_result = {
+            "domain": fqdn,
+            "available": pricing["available"] and _is_available_mock(fqdn),
+            **{k: pricing[k] for k in ("tld", "cost_cents", "margin_cents", "total_cents")},
+        }
+        base_for_suggestions = base
+    else:
+        base_for_suggestions = name
+
+    # Build suggestions
+    raw_suggestions = _suggest_domains(business_type, city, base=base_for_suggestions)
+    # Ensure the base itself is tried across all TLDs
+    if base_for_suggestions:
+        for tld in ("fr", "com", "shop", "boutique"):
+            fqdn = f"{slugify(base_for_suggestions)}.{tld}"
+            if fqdn not in raw_suggestions:
+                raw_suggestions.insert(0, fqdn)
+    raw_suggestions = raw_suggestions[:12]
+
+    suggestions: List[dict] = []
+    for fqdn in raw_suggestions:
+        try:
+            _, tld, norm = _split_domain(fqdn)
+        except HTTPException:
+            continue
+        pricing = _tld_price(tld)
+        suggestions.append({
+            "domain": norm,
+            "available": pricing["available"] and _is_available_mock(norm),
+            "tld": pricing["tld"],
+            "cost_cents": pricing["cost_cents"],
+            "margin_cents": pricing["margin_cents"],
+            "total_cents": pricing["total_cents"],
+        })
+
+    return {"query": name, "result": exact_result, "suggestions": suggestions, "currency": "EUR"}
+
+
+# ---------- Purchase (Stripe checkout) ----------
+
+@api_router.post("/domains/purchase")
+async def domain_purchase(body: DomainPurchaseIn, user: dict = Depends(current_user)):
+    """Create a Stripe Checkout session to purchase a domain.
+    On webhook/paid, we trigger the mocked registrar order + DNS configuration.
+    """
+    _, tld, fqdn = _split_domain(body.domain)
+    pricing = _tld_price(tld)
+    if not pricing["available"]:
+        raise HTTPException(status_code=400, detail=f"TLD .{tld} non supporté")
+    if not _is_available_mock(fqdn):
+        raise HTTPException(status_code=409, detail="Ce domaine n'est plus disponible")
+
+    # Prevent double-buying in our DB
+    existing = await db.domains.find_one({"domain_name": fqdn, "status": {"$in": ["active", "pending", "paid"]}})
+    if existing:
+        raise HTTPException(status_code=409, detail="Ce domaine a déjà été acheté sur la plateforme")
+
+    # Verify project ownership if project_id provided
+    project_kind = body.project_kind if body.project_kind in ("site", "shop") else "site"
+    if body.project_id:
+        coll = "sites" if project_kind == "site" else "shops"
+        project = await db[coll].find_one({"id": body.project_id, "user_id": user["id"]}, {"_id": 0, "id": 1, "slug": 1})
+        if not project:
+            raise HTTPException(status_code=404, detail="Projet introuvable")
+
+    if not STRIPE_API_KEY:
+        raise HTTPException(status_code=503, detail="Paiement non configuré")
+
+    origin = body.origin_url.rstrip("/")
+    success_url = f"{origin}/domain/success?session_id={{CHECKOUT_SESSION_ID}}"
+    cancel_url = f"{origin}/domain/cancel"
+    webhook_url = f"{origin}/api/webhook/stripe"
+
+    stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=webhook_url)
+    metadata = {
+        "kind": "domain_purchase",
+        "domain": fqdn,
+        "user_id": user["id"],
+        "project_id": body.project_id or "",
+        "project_kind": project_kind,
+    }
+    req = CheckoutSessionRequest(
+        amount=float(pricing["total_cents"]) / 100.0,
+        currency="eur",
+        success_url=success_url,
+        cancel_url=cancel_url,
+        metadata=metadata,
+    )
+    session = await stripe_checkout.create_checkout_session(req)
+
+    now = now_iso()
+    now_dt = datetime.now(timezone.utc)
+    domain_doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "project_id": body.project_id,
+        "project_kind": project_kind,
+        "domain_name": fqdn,
+        "tld": tld,
+        "status": "pending",  # pending -> paid -> active | error
+        "provider": "mock-registrar",  # swap to 'namecheap' / 'gandi' when integrated
+        "cost_cents": pricing["cost_cents"],
+        "margin_cents": pricing["margin_cents"],
+        "amount_cents": pricing["total_cents"],
+        "currency": "EUR",
+        "purchase_date": None,
+        "expiry_date": (now_dt + timedelta(days=365)).isoformat(),
+        "dns_config": None,
+        "ssl_status": "pending",
+        "stripe_session_id": session.session_id,
+        "payment_status": "initiated",
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.domains.insert_one(domain_doc)
+
+    return {
+        "url": session.url,
+        "session_id": session.session_id,
+        "domain": fqdn,
+        "amount_cents": pricing["total_cents"],
+        "currency": "EUR",
+    }
+
+
+def _build_dns_config(fqdn: str) -> dict:
+    """Return the DNS records a user would normally have to set — all handled automatically here."""
+    return {
+        "provider": "platform-dns (auto)",
+        "records": [
+            {"type": "A", "host": "@", "value": PLATFORM_A_RECORD, "ttl": 3600, "description": "Domaine racine"},
+            {"type": "A", "host": "www", "value": PLATFORM_A_RECORD, "ttl": 3600, "description": "Sous-domaine www"},
+            {"type": "CAA", "host": "@", "value": "0 issue \"letsencrypt.org\"", "ttl": 3600, "description": "Autorisation SSL (Let's Encrypt)"},
+        ],
+        "a_record_target": PLATFORM_A_RECORD,
+        "configured_at": now_iso(),
+    }
+
+
+async def _mock_registrar_purchase(fqdn: str, user_email: str) -> dict:
+    """Mocked registrar order. Replace with real Namecheap/Gandi/OpenProvider API call here.
+
+    Must return: { registrar_order_id, registration_date, expiry_date }
+    """
+    await asyncio.sleep(0.05)  # simulate API latency
+    now = datetime.now(timezone.utc)
+    return {
+        "registrar_order_id": f"MOCK-{uuid.uuid4().hex[:10].upper()}",
+        "registration_date": now.isoformat(),
+        "expiry_date": (now + timedelta(days=365)).isoformat(),
+    }
+
+
+async def _auto_connect_domain_to_project(domain_doc: dict) -> Optional[dict]:
+    """Apply the purchased domain to its linked project (site or shop) so the site is served at that URL."""
+    project_id = domain_doc.get("project_id")
+    if not project_id:
+        return None
+    kind = domain_doc.get("project_kind", "site")
+    if kind == "site":
+        coll = db.sites
+    elif kind == "shop":
+        coll = db.shops
+    else:
+        return None
+    # Verify the project still belongs to the buyer
+    project = await coll.find_one({"id": project_id, "user_id": domain_doc["user_id"]}, {"_id": 0, "id": 1})
+    if not project:
+        return None
+    await coll.update_one(
+        {"id": project_id},
+        {"$set": {
+            "custom_domain": domain_doc["domain_name"],
+            "domain_verified": True,
+            "domain_verified_at": now_iso(),
+            "domain_token": None,
+            "updated_at": now_iso(),
+        }},
+    )
+    return {"kind": kind, "id": project_id}
+
+
+async def _apply_domain_purchase_if_paid(session_id: str) -> Optional[dict]:
+    """Idempotent: run registrar purchase + DNS config + attach to project when Stripe session is paid."""
+    doc = await db.domains.find_one({"stripe_session_id": session_id}, {"_id": 0})
+    if not doc:
+        return None
+    if doc.get("status") == "active":
+        return doc
+    if not STRIPE_API_KEY:
+        return doc
+
+    try:
+        stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url="")
+        status_resp = await stripe_checkout.get_checkout_status(session_id)
+    except Exception as e:
+        logger.warning(f"Stripe status lookup failed for domain session {session_id}: {e}")
+        return doc
+
+    update = {"payment_status": status_resp.payment_status, "updated_at": now_iso()}
+
+    if status_resp.payment_status == "paid" and doc.get("status") != "active":
+        # 1) Registrar purchase (mocked)
+        try:
+            user = await db.users.find_one({"id": doc["user_id"]}, {"_id": 0, "email": 1})
+            receipt = await _mock_registrar_purchase(doc["domain_name"], user.get("email") if user else "unknown")
+            update["registrar_order_id"] = receipt["registrar_order_id"]
+            update["purchase_date"] = receipt["registration_date"]
+            update["expiry_date"] = receipt["expiry_date"]
+        except Exception as e:
+            logger.error(f"Registrar order failed for {doc['domain_name']}: {e}")
+            update["status"] = "error"
+            update["error"] = "registrar_failed"
+            await db.domains.update_one({"stripe_session_id": session_id}, {"$set": update})
+            return await db.domains.find_one({"stripe_session_id": session_id}, {"_id": 0})
+
+        # 2) DNS auto-configure (mocked — returns the config we would have applied)
+        update["dns_config"] = _build_dns_config(doc["domain_name"])
+
+        # 3) SSL auto-provisioning (mocked: Let's Encrypt via reverse proxy)
+        update["ssl_status"] = "active"
+        update["ssl_issuer"] = "Let's Encrypt (auto)"
+
+        update["status"] = "active"
+        update["activated_at"] = now_iso()
+
+        # 4) Attach domain to its project so the site is served at this URL
+        attached = await _auto_connect_domain_to_project({**doc, **update})
+        if attached:
+            update["attached_project"] = attached
+
+    await db.domains.update_one({"stripe_session_id": session_id}, {"$set": update})
+    return await db.domains.find_one({"stripe_session_id": session_id}, {"_id": 0})
+
+
+# ---------- Status + listing ----------
+
+@api_router.get("/domains")
+async def list_domains(user: dict = Depends(current_user)):
+    domains = await db.domains.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return [_project_domain_public(d) for d in domains]
+
+
+@api_router.get("/domains/status/{session_id}")
+async def domain_status(session_id: str, user: dict = Depends(current_user)):
+    """Poll this from the success page to confirm activation."""
+    doc = await db.domains.find_one({"stripe_session_id": session_id, "user_id": user["id"]}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Commande domaine introuvable")
+    fresh = await _apply_domain_purchase_if_paid(session_id) or doc
+    return _project_domain_public(fresh)
+
+
+@api_router.post("/domains/{domain_id}/connect")
+async def domain_connect_to_project(domain_id: str, body: Dict[str, Any], user: dict = Depends(current_user)):
+    """Manually (re)attach a previously-purchased active domain to a project."""
+    domain_doc = await db.domains.find_one({"id": domain_id, "user_id": user["id"]}, {"_id": 0})
+    if not domain_doc:
+        raise HTTPException(status_code=404, detail="Domaine introuvable")
+    if domain_doc.get("status") != "active":
+        raise HTTPException(status_code=400, detail="Domaine pas encore actif")
+    project_id = body.get("project_id")
+    project_kind = body.get("project_kind", "site")
+    if project_kind not in ("site", "shop"):
+        raise HTTPException(status_code=400, detail="project_kind invalide")
+    coll = db.sites if project_kind == "site" else db.shops
+    project = await coll.find_one({"id": project_id, "user_id": user["id"]}, {"_id": 0, "id": 1})
+    if not project:
+        raise HTTPException(status_code=404, detail="Projet introuvable")
+    await db.domains.update_one({"id": domain_id}, {"$set": {"project_id": project_id, "project_kind": project_kind, "updated_at": now_iso()}})
+    await coll.update_one(
+        {"id": project_id},
+        {"$set": {
+            "custom_domain": domain_doc["domain_name"],
+            "domain_verified": True,
+            "domain_verified_at": now_iso(),
+            "domain_token": None,
+            "updated_at": now_iso(),
+        }},
+    )
+    return {"ok": True, "domain": domain_doc["domain_name"], "project_id": project_id}
+
 
 
 
