@@ -4,7 +4,7 @@ import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Search, ShieldCheck, Globe, Check, X, Loader2, ShoppingCart, Sparkles, ArrowRight } from "lucide-react";
+import { Search, ShieldCheck, Globe, Check, X, Loader2, ShoppingCart, Sparkles, ArrowRight, RefreshCw, AlertTriangle } from "lucide-react";
 
 function StateBadge({ status }) {
   if (status === "active")
@@ -32,6 +32,21 @@ export default function DomainManager({ businessType, city, projectId, projectKi
     } catch (e) { /* ignore */ }
   };
   useEffect(() => { loadMyDomains(); }, []);
+
+  // Auto-trigger renewal from email deep-link ?renew=<id>
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    const renewId = p.get("renew");
+    if (!renewId) return;
+    (async () => {
+      try {
+        const r = await api.post(`/domains/${renewId}/renew`, { origin_url: window.location.origin });
+        window.location.href = r.data.url;
+      } catch (e) {
+        toast.error(e?.response?.data?.detail || "Lien de renouvellement invalide");
+      }
+    })();
+  }, []);
 
   const runSearch = async (name) => {
     if (!name || name.length < 2) { setResults(null); return; }
@@ -133,20 +148,7 @@ export default function DomainManager({ businessType, city, projectId, projectKi
           <div className="font-mono-grotesk text-[10px] uppercase tracking-[0.2em] text-[#71717A] mb-3">// vos domaines</div>
           <div className="space-y-2">
             {myDomains.map((d) => (
-              <div key={d.id} data-testid={`my-domain-${d.domain_name}`} className="bg-white border border-black/10 p-4 flex flex-wrap items-center gap-3">
-                <div className="w-8 h-8 bg-[#FAFAFA] border border-black/10 flex items-center justify-center shrink-0"><Globe className="w-3.5 h-3.5 text-[#71717A]" /></div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-display font-bold text-sm truncate">{d.domain_name}</div>
-                  <div className="font-mono-grotesk text-[10px] uppercase tracking-[0.2em] text-[#71717A] mt-0.5">
-                    {d.provider} · {fmt(d.amount_cents)} / an
-                    {d.expiry_date && <> · expire le {new Date(d.expiry_date).toLocaleDateString("fr-FR")}</>}
-                  </div>
-                </div>
-                <StateBadge status={d.status} />
-                {d.status === "active" && (
-                  <a href={`https://${d.domain_name}`} target="_blank" rel="noreferrer" className="text-xs text-[#F95A2C] hover:underline font-manrope">Ouvrir ↗</a>
-                )}
-              </div>
+              <MyDomainRow key={d.id} d={d} fmt={fmt} onReload={loadMyDomains} />
             ))}
           </div>
         </div>
@@ -155,8 +157,7 @@ export default function DomainManager({ businessType, city, projectId, projectKi
   );
 }
 
-function DomainCard({ item, onBuy, purchasing, fmt, exact = false }) {
-  const isBusy = purchasing === item.domain;
+function DomainCard({ item, onBuy, purchasing, fmt, exact = false }) {  const isBusy = purchasing === item.domain;
   return (
     <div
       data-testid={`domain-card-${item.domain}`}
@@ -183,6 +184,93 @@ function DomainCard({ item, onBuy, purchasing, fmt, exact = false }) {
         </Button>
       ) : (
         <span data-testid={`unavailable-${item.domain}`} className="font-mono-grotesk text-[10px] uppercase tracking-[0.2em] text-red-600 flex items-center gap-1 shrink-0"><X className="w-3 h-3" /> pris</span>
+      )}
+    </div>
+  );
+}
+
+function daysUntil(iso) {
+  if (!iso) return null;
+  const d = Math.ceil((new Date(iso).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  return d;
+}
+
+function MyDomainRow({ d, fmt, onReload }) {
+  const [renewing, setRenewing] = useState(false);
+  const [togglingAuto, setTogglingAuto] = useState(false);
+  const days = daysUntil(d.expiry_date);
+  const isExpiringSoon = d.status === "active" && days !== null && days <= 30;
+
+  const renew = async () => {
+    setRenewing(true);
+    try {
+      const r = await api.post(`/domains/${d.id}/renew`, { origin_url: window.location.origin });
+      window.location.href = r.data.url;
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Renouvellement indisponible");
+      setRenewing(false);
+    }
+  };
+
+  const toggleAutoRenew = async () => {
+    setTogglingAuto(true);
+    try {
+      await api.put(`/domains/${d.id}/auto-renew`, { auto_renew: !d.auto_renew });
+      toast.success(!d.auto_renew ? "Renouvellement auto activé" : "Renouvellement auto désactivé");
+      onReload?.();
+    } catch (e) {
+      toast.error("Erreur");
+    } finally {
+      setTogglingAuto(false);
+    }
+  };
+
+  return (
+    <div data-testid={`my-domain-${d.domain_name}`} className={`bg-white border ${isExpiringSoon ? "border-[#F95A2C]" : "border-black/10"} p-4`}>
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="w-8 h-8 bg-[#FAFAFA] border border-black/10 flex items-center justify-center shrink-0"><Globe className="w-3.5 h-3.5 text-[#71717A]" /></div>
+        <div className="flex-1 min-w-0">
+          <div className="font-display font-bold text-sm truncate">{d.domain_name}</div>
+          <div className="font-mono-grotesk text-[10px] uppercase tracking-[0.2em] text-[#71717A] mt-0.5">
+            {d.provider} · {fmt(d.amount_cents)} / an
+            {d.expiry_date && <> · expire le {new Date(d.expiry_date).toLocaleDateString("fr-FR")}</>}
+          </div>
+        </div>
+        <StateBadge status={d.status} />
+        {d.status === "active" && (
+          <a href={`https://${d.domain_name}`} target="_blank" rel="noreferrer" className="text-xs text-[#F95A2C] hover:underline font-manrope">Ouvrir ↗</a>
+        )}
+      </div>
+      {d.status === "active" && (
+        <div className={`mt-3 flex flex-wrap items-center gap-3 pt-3 border-t border-black/5`}>
+          {isExpiringSoon && (
+            <div className="flex items-center gap-1.5 text-xs font-manrope text-[#F95A2C]" data-testid={`expiring-badge-${d.domain_name}`}>
+              <AlertTriangle className="w-3.5 h-3.5" />
+              {days <= 0 ? "Expire aujourd'hui !" : `Expire dans ${days} jour${days > 1 ? "s" : ""}`}
+            </div>
+          )}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={renew}
+            disabled={renewing}
+            data-testid={`renew-${d.domain_name}`}
+            className={`rounded-none h-8 text-xs ${isExpiringSoon ? "border-[#F95A2C] text-[#F95A2C] hover:bg-[#F95A2C] hover:text-white" : "border-black/20"}`}
+          >
+            {renewing ? <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> Redirection</> : <><RefreshCw className="w-3 h-3 mr-1.5" /> Renouveler ({fmt(d.amount_cents)})</>}
+          </Button>
+          <label className="flex items-center gap-2 text-xs font-manrope cursor-pointer ml-auto" data-testid={`auto-renew-toggle-${d.domain_name}`}>
+            <input
+              type="checkbox"
+              checked={!!d.auto_renew}
+              onChange={toggleAutoRenew}
+              disabled={togglingAuto}
+              className="accent-[#F95A2C]"
+              data-testid={`auto-renew-checkbox-${d.domain_name}`}
+            />
+            <span className="text-[#52525B]">Renouvellement auto</span>
+          </label>
+        </div>
       )}
     </div>
   );

@@ -1168,10 +1168,12 @@ async def stripe_webhook(request: Request):
         stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url="")
         event = await stripe_checkout.handle_webhook(body_bytes, sig)
         if event.session_id:
-            # Dispatch in order: domain purchase -> shop order -> pro credit
+            # Dispatch in order: domain purchase -> domain renewal -> shop order -> pro credit
             domain_purchase = await db.domains.find_one({"stripe_session_id": event.session_id}, {"_id": 0, "id": 1})
             if domain_purchase:
                 await _apply_domain_purchase_if_paid(event.session_id)
+            elif await _stripe_webhook_dispatch_renewal(event.session_id):
+                pass
             else:
                 shop_order = await db.orders.find_one({"stripe_session_id": event.session_id}, {"_id": 0, "id": 1})
                 if shop_order:
@@ -2338,6 +2340,340 @@ async def domain_connect_to_project(domain_id: str, body: Dict[str, Any], user: 
     return {"ok": True, "domain": domain_doc["domain_name"], "project_id": project_id}
 
 
+
+
+
+# =============================================================================
+# ANALYTICS + DOMAIN REMINDERS / RENEWAL — Phase 6
+# =============================================================================
+
+DOMAIN_REMINDER_WINDOWS = [
+    ("1d", 1),
+    ("7d", 7),
+    ("30d", 30),
+]
+
+
+def _month_ago_iso(days: int) -> str:
+    return (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+
+
+async def _sum_totals(cursor) -> tuple:
+    total_cents = 0
+    count = 0
+    async for doc in cursor:
+        total_cents += int(doc.get("total_cents") or doc.get("amount_cents") or 0)
+        count += 1
+    return total_cents, count
+
+
+@api_router.get("/analytics/summary")
+async def analytics_summary(user: dict = Depends(current_user)):
+    """Return a dashboard summary across sites, shops, leads, orders and domains for the current user."""
+    user_id = user["id"]
+    month_ago = _month_ago_iso(30)
+    thirty_days_from_now = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+
+    # Sites + shops counts
+    sites_count = await db.sites.count_documents({"user_id": user_id})
+    shops_count = await db.shops.count_documents({"user_id": user_id})
+
+    # Leads total / last 30 days (across all user sites)
+    user_sites = await db.sites.find({"user_id": user_id}, {"_id": 0, "id": 1}).to_list(500)
+    site_ids = [s["id"] for s in user_sites]
+    leads_total = await db.leads.count_documents({"site_id": {"$in": site_ids}}) if site_ids else 0
+    leads_30d = await db.leads.count_documents({"site_id": {"$in": site_ids}, "created_at": {"$gte": month_ago}}) if site_ids else 0
+
+    # Shop orders (paid only)
+    user_shops = await db.shops.find({"user_id": user_id}, {"_id": 0, "id": 1}).to_list(500)
+    shop_ids = [s["id"] for s in user_shops]
+    orders_paid_filter = {"shop_id": {"$in": shop_ids}, "status": {"$in": ["paid", "shipped", "delivered"]}} if shop_ids else {"shop_id": "__none__"}
+    orders_30d_filter = {**orders_paid_filter, "created_at": {"$gte": month_ago}} if shop_ids else orders_paid_filter
+    orders_total_cents, orders_total_count = await _sum_totals(db.orders.find(orders_paid_filter, {"_id": 0, "total_cents": 1}))
+    orders_30d_cents, orders_30d_count = await _sum_totals(db.orders.find(orders_30d_filter, {"_id": 0, "total_cents": 1}))
+    avg_basket_cents = int(orders_total_cents / orders_total_count) if orders_total_count else 0
+
+    # Top products (by units sold among paid orders) — MVP: loop in Python
+    product_sales: Dict[str, dict] = {}
+    if shop_ids:
+        async for o in db.orders.find(orders_paid_filter, {"_id": 0, "items": 1}):
+            for item in o.get("items", []) or []:
+                pid = item.get("product_id")
+                if not pid:
+                    continue
+                entry = product_sales.setdefault(pid, {"product_id": pid, "name": item.get("name"), "units": 0, "revenue_cents": 0})
+                entry["units"] += int(item.get("qty") or 0)
+                entry["revenue_cents"] += int(item.get("line_total_cents") or 0)
+    top_products = sorted(product_sales.values(), key=lambda e: e["revenue_cents"], reverse=True)[:5]
+
+    # Domains
+    domains_all = await db.domains.find({"user_id": user_id, "status": "active"}, {"_id": 0}).to_list(200)
+    domains_active_count = len(domains_all)
+    domains_total_cents = sum(int(d.get("amount_cents") or 0) for d in domains_all)
+    domains_30d_cents = sum(
+        int(d.get("amount_cents") or 0) for d in domains_all if (d.get("activated_at") or d.get("purchase_date") or "") >= month_ago
+    )
+    domains_expiring_soon = [
+        {
+            "id": d["id"],
+            "domain_name": d["domain_name"],
+            "expiry_date": d["expiry_date"],
+            "auto_renew": bool(d.get("auto_renew")),
+            "days_left": max(0, (datetime.fromisoformat(d["expiry_date"]).replace(tzinfo=timezone.utc) - datetime.now(timezone.utc)).days) if d.get("expiry_date") else None,
+        }
+        for d in domains_all
+        if d.get("expiry_date") and d["expiry_date"] <= thirty_days_from_now
+    ]
+    domains_expiring_soon.sort(key=lambda d: d["expiry_date"])
+
+    # Monthly series (last 6 months) — CA combined shop + domains
+    series: List[dict] = []
+    for i in range(5, -1, -1):
+        month_start = (datetime.now(timezone.utc).replace(day=1) - timedelta(days=i * 30)).replace(day=1)
+        month_end = (month_start + timedelta(days=32)).replace(day=1)
+        month_start_iso = month_start.isoformat()
+        month_end_iso = month_end.isoformat()
+        orders_month_cents, _ = await _sum_totals(db.orders.find({
+            **orders_paid_filter,
+            "created_at": {"$gte": month_start_iso, "$lt": month_end_iso},
+        }, {"_id": 0, "total_cents": 1})) if shop_ids else (0, 0)
+        domains_month_cents = sum(
+            int(d.get("amount_cents") or 0) for d in domains_all
+            if (d.get("activated_at") or d.get("purchase_date") or "") >= month_start_iso and (d.get("activated_at") or d.get("purchase_date") or "") < month_end_iso
+        )
+        series.append({
+            "month": month_start.strftime("%Y-%m"),
+            "shop_cents": orders_month_cents,
+            "domain_cents": domains_month_cents,
+            "total_cents": orders_month_cents + domains_month_cents,
+        })
+
+    return {
+        "sites_count": sites_count,
+        "shops_count": shops_count,
+        "leads": {"total": leads_total, "last_30d": leads_30d},
+        "orders": {
+            "total_cents": orders_total_cents,
+            "total_count": orders_total_count,
+            "last_30d_cents": orders_30d_cents,
+            "last_30d_count": orders_30d_count,
+            "avg_basket_cents": avg_basket_cents,
+            "top_products": top_products,
+        },
+        "domains": {
+            "active_count": domains_active_count,
+            "total_cents": domains_total_cents,
+            "last_30d_cents": domains_30d_cents,
+            "expiring_soon": domains_expiring_soon,
+        },
+        "monthly_series": series,
+        "currency": "EUR",
+    }
+
+
+# ---------- Domain auto-renewal toggle ----------
+
+class AutoRenewIn(BaseModel):
+    auto_renew: bool
+
+
+@api_router.put("/domains/{domain_id}/auto-renew")
+async def update_auto_renew(domain_id: str, body: AutoRenewIn, user: dict = Depends(current_user)):
+    doc = await db.domains.find_one({"id": domain_id, "user_id": user["id"]}, {"_id": 0, "id": 1, "status": 1})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Domaine introuvable")
+    await db.domains.update_one({"id": domain_id}, {"$set": {"auto_renew": body.auto_renew, "updated_at": now_iso()}})
+    return {"ok": True, "auto_renew": body.auto_renew}
+
+
+# ---------- Renewal checkout (one-click from email reminder or dashboard) ----------
+
+class DomainRenewIn(BaseModel):
+    origin_url: str
+
+
+@api_router.post("/domains/{domain_id}/renew")
+async def create_renewal_checkout(domain_id: str, body: DomainRenewIn, user: dict = Depends(current_user)):
+    doc = await db.domains.find_one({"id": domain_id, "user_id": user["id"]}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Domaine introuvable")
+    if not STRIPE_API_KEY:
+        raise HTTPException(status_code=503, detail="Paiement non configuré")
+    pricing = _tld_price(doc.get("tld", ""))
+    origin = body.origin_url.rstrip("/")
+    success_url = f"{origin}/domain/success?session_id={{CHECKOUT_SESSION_ID}}"
+    cancel_url = f"{origin}/domain/cancel"
+    webhook_url = f"{origin}/api/webhook/stripe"
+
+    stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=webhook_url)
+    metadata = {
+        "kind": "domain_renewal",
+        "domain_id": domain_id,
+        "domain": doc["domain_name"],
+        "user_id": user["id"],
+    }
+    req = CheckoutSessionRequest(
+        amount=float(pricing["total_cents"]) / 100.0,
+        currency="eur",
+        success_url=success_url,
+        cancel_url=cancel_url,
+        metadata=metadata,
+    )
+    session = await stripe_checkout.create_checkout_session(req)
+    now = now_iso()
+    renewal = {
+        "id": str(uuid.uuid4()),
+        "domain_id": domain_id,
+        "user_id": user["id"],
+        "domain_name": doc["domain_name"],
+        "amount_cents": pricing["total_cents"],
+        "currency": "EUR",
+        "stripe_session_id": session.session_id,
+        "payment_status": "initiated",
+        "status": "pending",
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.domain_renewals.insert_one(renewal)
+    return {"url": session.url, "session_id": session.session_id, "amount_cents": pricing["total_cents"]}
+
+
+async def _apply_domain_renewal_if_paid(session_id: str) -> Optional[dict]:
+    renewal = await db.domain_renewals.find_one({"stripe_session_id": session_id}, {"_id": 0})
+    if not renewal:
+        return None
+    if renewal.get("status") == "applied":
+        return renewal
+    resolved = renewal.get("payment_status")
+    if resolved != "paid" and STRIPE_API_KEY:
+        try:
+            stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url="")
+            status_resp = await stripe_checkout.get_checkout_status(session_id)
+            resolved = status_resp.payment_status
+        except Exception as e:
+            logger.warning(f"Stripe lookup failed for renewal {session_id}: {e}")
+    update = {"payment_status": resolved, "updated_at": now_iso()}
+    if resolved == "paid" and renewal.get("status") != "applied":
+        # Extend domain expiry by 365 days from current expiry (or now if already expired)
+        domain_doc = await db.domains.find_one({"id": renewal["domain_id"]})
+        if domain_doc:
+            try:
+                current_exp = datetime.fromisoformat(domain_doc.get("expiry_date")) if domain_doc.get("expiry_date") else datetime.now(timezone.utc)
+                if current_exp.tzinfo is None:
+                    current_exp = current_exp.replace(tzinfo=timezone.utc)
+                if current_exp < datetime.now(timezone.utc):
+                    current_exp = datetime.now(timezone.utc)
+            except Exception:
+                current_exp = datetime.now(timezone.utc)
+            new_exp = (current_exp + timedelta(days=365)).isoformat()
+            await db.domains.update_one(
+                {"id": renewal["domain_id"]},
+                {"$set": {
+                    "expiry_date": new_exp,
+                    "last_renewed_at": now_iso(),
+                    "reminders_sent": [],  # reset so new cycle can send reminders again
+                    "updated_at": now_iso(),
+                }},
+            )
+            update["status"] = "applied"
+            update["new_expiry_date"] = new_exp
+    await db.domain_renewals.update_one({"stripe_session_id": session_id}, {"$set": update})
+    return await db.domain_renewals.find_one({"stripe_session_id": session_id}, {"_id": 0})
+
+
+# ---------- Domain renewal reminder cron ----------
+
+def _render_reminder_email(domain_name: str, days_left: int, renew_link: str) -> str:
+    urgency_color = "#C84B31" if days_left <= 7 else "#F95A2C"
+    urgency_label = "urgent" if days_left <= 1 else ("bientôt" if days_left <= 7 else "à venir")
+    return f"""
+    <table width="100%" cellpadding="0" cellspacing="0" style="font-family:-apple-system,BlinkMacSystemFont,sans-serif; background:#FAFAFA; padding:32px 16px;">
+      <tr><td align="center">
+        <table width="560" cellpadding="0" cellspacing="0" style="background:#fff; border:1px solid #E4E4E7;">
+          <tr><td style="padding:32px 32px 0; border-bottom:4px solid {urgency_color};">
+            <div style="font-family:monospace; font-size:10px; letter-spacing:.2em; text-transform:uppercase; color:#71717A; margin-bottom:8px;">// rappel · {urgency_label}</div>
+            <h1 style="margin:0 0 8px; font-size:28px; color:#09090B; font-weight:800;">{domain_name} expire dans <span style="color:{urgency_color};">{days_left} jour{'s' if days_left > 1 else ''}</span></h1>
+            <p style="margin:0 0 24px; color:#52525B; font-size:14px;">Renouvelez en un clic — votre site reste en ligne sans interruption. Si vous ne renouvelez pas, le domaine sera libéré à sa date d'expiration.</p>
+          </td></tr>
+          <tr><td style="padding:24px 32px 32px;">
+            <a href="{renew_link}" style="display:inline-block; background:#F95A2C; color:#fff; padding:14px 28px; text-decoration:none; font-weight:600;">Renouveler maintenant →</a>
+            <p style="margin:24px 0 0; color:#71717A; font-size:12px;">Besoin d'aide ? Répondez simplement à cet email.</p>
+          </td></tr>
+        </table>
+      </td></tr>
+    </table>
+    """
+
+
+async def _send_domain_reminders_impl() -> dict:
+    """Scan active domains and send reminder emails at 30/7/1 day thresholds.
+    Stores `reminders_sent` on the domain doc to prevent duplicates.
+    Returns a summary dict. Idempotent.
+    """
+    now = datetime.now(timezone.utc)
+    # Pull all domains with an expiry in the coming 31 days
+    cursor = db.domains.find({
+        "status": "active",
+        "expiry_date": {"$lte": (now + timedelta(days=31)).isoformat()},
+    }, {"_id": 0})
+    sent: List[dict] = []
+    errors: List[dict] = []
+    async for d in cursor:
+        try:
+            exp = datetime.fromisoformat(d["expiry_date"])
+            if exp.tzinfo is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+            days_left = max(0, (exp - now).days)
+        except Exception:
+            continue
+        already = set(d.get("reminders_sent") or [])
+        # Pick the tightest window that applies; only send if not already sent at that window.
+        # (If tightest already sent, do nothing — don't escalate to a broader window.)
+        chosen_label: Optional[str] = None
+        for label, threshold in DOMAIN_REMINDER_WINDOWS:
+            if days_left <= threshold:
+                if label not in already:
+                    chosen_label = label
+                break
+        if not chosen_label:
+            continue
+        user = await db.users.find_one({"id": d["user_id"]}, {"_id": 0, "email": 1})
+        if not user or not user.get("email"):
+            continue
+        # Renewal link: dashboard deep-link. Frontend handles "one-click renew" button inside /domains.
+        renew_link = f"{os.environ.get('PUBLIC_APP_URL', '').rstrip('/') or 'https://aisite-builder-8.preview.emergentagent.com'}/domains?renew={d['id']}"
+        try:
+            await asyncio.to_thread(
+                _send_email_sync,
+                user["email"],
+                f"[{chosen_label}] Votre domaine {d['domain_name']} expire bientôt",
+                _render_reminder_email(d["domain_name"], days_left, renew_link),
+            )
+            await db.domains.update_one(
+                {"id": d["id"]},
+                {"$addToSet": {"reminders_sent": chosen_label}, "$set": {"updated_at": now_iso()}},
+            )
+            sent.append({"domain_id": d["id"], "domain_name": d["domain_name"], "label": chosen_label, "email": user["email"], "days_left": days_left})
+        except Exception as e:
+            logger.error(f"Reminder email failed for {d['domain_name']}: {e}")
+            errors.append({"domain_id": d["id"], "error": str(e)})
+    return {"sent": sent, "errors": errors, "processed_at": now_iso()}
+
+
+@api_router.post("/admin/cron/domain-reminders")
+async def run_domain_reminders(_admin: dict = Depends(admin_only)):
+    """Admin-triggered (or cron-triggered) reminder dispatch. Idempotent."""
+    return await _send_domain_reminders_impl()
+
+
+# Plug renewal dispatch into the webhook router as well
+async def _stripe_webhook_dispatch_renewal(session_id: str) -> bool:
+    """Return True if session_id was a domain renewal session (and handled)."""
+    renewal = await db.domain_renewals.find_one({"stripe_session_id": session_id}, {"_id": 0, "id": 1})
+    if not renewal:
+        return False
+    await _apply_domain_renewal_if_paid(session_id)
+    return True
 
 
 

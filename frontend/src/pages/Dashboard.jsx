@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Plus, ExternalLink, Trash2, MessageSquare, LogOut, Globe, Loader2, Crown, Sparkles, Store, ShoppingBag, Lock } from "lucide-react";
+import DashboardAnalytics from "@/components/DashboardAnalytics";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
@@ -143,6 +144,8 @@ export default function Dashboard() {
             </div>
           )
         )}
+
+        <DashboardAnalytics />
 
         <div className="grid md:grid-cols-12 gap-8 items-end mb-12">
           <div className="md:col-span-8">
