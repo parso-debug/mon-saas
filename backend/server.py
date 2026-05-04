@@ -2243,19 +2243,20 @@ async def _apply_domain_purchase_if_paid(session_id: str) -> Optional[dict]:
         return None
     if doc.get("status") == "active":
         return doc
-    if not STRIPE_API_KEY:
-        return doc
 
-    try:
-        stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url="")
-        status_resp = await stripe_checkout.get_checkout_status(session_id)
-    except Exception as e:
-        logger.warning(f"Stripe status lookup failed for domain session {session_id}: {e}")
-        return doc
+    # Resolve payment status: prefer stored (webhook set it) else query Stripe.
+    resolved_payment_status: Optional[str] = doc.get("payment_status")
+    if resolved_payment_status != "paid" and STRIPE_API_KEY:
+        try:
+            stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url="")
+            status_resp = await stripe_checkout.get_checkout_status(session_id)
+            resolved_payment_status = status_resp.payment_status
+        except Exception as e:
+            logger.warning(f"Stripe status lookup failed for domain session {session_id}: {e}")
 
-    update = {"payment_status": status_resp.payment_status, "updated_at": now_iso()}
+    update = {"payment_status": resolved_payment_status or doc.get("payment_status"), "updated_at": now_iso()}
 
-    if status_resp.payment_status == "paid" and doc.get("status") != "active":
+    if resolved_payment_status == "paid" and doc.get("status") != "active":
         # 1) Registrar purchase (mocked)
         try:
             user = await db.users.find_one({"id": doc["user_id"]}, {"_id": 0, "email": 1})

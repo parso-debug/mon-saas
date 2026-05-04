@@ -96,6 +96,11 @@ export default function Dashboard() {
             <span className="font-mono-grotesk text-[10px] uppercase tracking-[0.2em] text-[#71717A] ml-2 hidden sm:inline">/ console</span>
           </Link>
           <div className="flex items-center gap-3">
+            <Link to="/domains" data-testid="nav-domains">
+              <Button variant="outline" size="sm" className="rounded-none border-black/20 hover:bg-[#09090B] hover:text-white">
+                <Globe className="w-3.5 h-3.5 mr-2" /> Domaines
+              </Button>
+            </Link>
             {user?.is_admin && (
               <Link to="/admin" data-testid="admin-link">
                 <Button variant="outline" size="sm" className="rounded-none border-[#F95A2C] text-[#F95A2C] hover:bg-[#F95A2C] hover:text-white">
