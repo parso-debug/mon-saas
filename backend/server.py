@@ -1,3 +1,4 @@
+import json
 """
 ArtisanWeb SaaS - Website-as-a-Service backend
 FastAPI + MongoDB + JWT auth + Claude Sonnet 4.5 (content) + Gemini Nano Banana (images)
@@ -28,6 +29,7 @@ import dns.exception
 
 from emergentintegrations.llm.chat import LlmChat, UserMessage
 from emergentintegrations.payments.stripe.checkout import StripeCheckout, CheckoutSessionRequest
+import stripe as stripe_sdk
 
 from app_settings_defaults import DEFAULT_APP_SETTINGS
 
@@ -49,6 +51,9 @@ if RESEND_API_KEY:
     resend.api_key = RESEND_API_KEY
 
 STRIPE_API_KEY = os.environ.get('STRIPE_API_KEY', '')
+STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
+if STRIPE_API_KEY:
+    stripe_sdk.api_key = STRIPE_API_KEY
 
 # Admin bootstrap: comma-separated list of emails auto-promoted to admin
 ADMIN_EMAILS = {
@@ -2677,13 +2682,285 @@ async def _stripe_webhook_dispatch_renewal(session_id: str) -> bool:
 
 
 
+
+# =============================================================================
+# STRIPE SUBSCRIPTION — Domain auto-renewal via recurring billing (Phase 6.1)
+# =============================================================================
+
+
+class DomainAutoRenewSubscribeIn(BaseModel):
+    origin_url: str
+
+
+@api_router.post("/domains/{domain_id}/auto-renew/subscribe")
+async def create_auto_renew_subscription(domain_id: str, body: DomainAutoRenewSubscribeIn, user: dict = Depends(current_user)):
+    """Create a Stripe Subscription checkout session (mode=subscription) with a yearly
+    recurring Price that matches the TLD pricing. On successful checkout, the Stripe
+    customer + subscription IDs are persisted on the domain and auto_renew is set True.
+    """
+    if not STRIPE_API_KEY:
+        raise HTTPException(status_code=503, detail="Paiement non configuré")
+
+    doc = await db.domains.find_one({"id": domain_id, "user_id": user["id"]}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Domaine introuvable")
+    if doc.get("status") != "active":
+        raise HTTPException(status_code=400, detail="Domaine pas encore actif")
+    if doc.get("stripe_subscription_id") and doc.get("auto_renew"):
+        raise HTTPException(status_code=409, detail="Renouvellement auto déjà activé")
+
+    pricing = _tld_price(doc.get("tld", ""))
+    origin = body.origin_url.rstrip("/")
+    success_url = f"{origin}/domain/auto-renew-success?session_id={{CHECKOUT_SESSION_ID}}&domain_id={domain_id}"
+    cancel_url = f"{origin}/domains"
+
+    try:
+        session = await asyncio.to_thread(
+            stripe_sdk.checkout.Session.create,
+            mode="subscription",
+            payment_method_types=["card"],
+            line_items=[{
+                "quantity": 1,
+                "price_data": {
+                    "currency": "eur",
+                    "product_data": {
+                        "name": f"Renouvellement auto — {doc['domain_name']}",
+                        "description": f"Renouvellement annuel automatique du domaine {doc['domain_name']}",
+                    },
+                    "unit_amount": pricing["total_cents"],
+                    "recurring": {"interval": "year", "interval_count": 1},
+                },
+            }],
+            success_url=success_url,
+            cancel_url=cancel_url,
+            customer_email=user.get("email"),
+            metadata={
+                "kind": "domain_auto_renew_subscription",
+                "domain_id": domain_id,
+                "user_id": user["id"],
+                "domain_name": doc["domain_name"],
+            },
+            subscription_data={
+                "metadata": {
+                    "kind": "domain_auto_renew_subscription",
+                    "domain_id": domain_id,
+                    "user_id": user["id"],
+                    "domain_name": doc["domain_name"],
+                },
+            },
+        )
+    except Exception as e:
+        logger.error(f"Stripe subscription session creation failed: {e}")
+        raise HTTPException(status_code=502, detail=f"Stripe indisponible: {str(e)[:100]}")
+
+    await db.domains.update_one(
+        {"id": domain_id},
+        {"$set": {
+            "auto_renew_session_id": session.id,
+            "auto_renew_pending": True,
+            "updated_at": now_iso(),
+        }},
+    )
+    return {"url": session.url, "session_id": session.id}
+
+
+@api_router.get("/domains/{domain_id}/auto-renew/status/{session_id}")
+async def domain_auto_renew_status(domain_id: str, session_id: str, user: dict = Depends(current_user)):
+    """Poll after the user returns from Stripe — fetch session, attach subscription to domain."""
+    doc = await db.domains.find_one({"id": domain_id, "user_id": user["id"]}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Domaine introuvable")
+    if doc.get("auto_renew") and doc.get("stripe_subscription_id"):
+        return {"auto_renew": True, "subscription_id": doc["stripe_subscription_id"]}
+    if not STRIPE_API_KEY:
+        return {"auto_renew": False}
+
+    try:
+        session = await asyncio.to_thread(stripe_sdk.checkout.Session.retrieve, session_id)
+    except Exception as e:
+        logger.warning(f"Failed to retrieve subscription session {session_id}: {e}")
+        return {"auto_renew": False, "pending": True}
+
+    subscription_id = getattr(session, "subscription", None)
+    customer_id = getattr(session, "customer", None)
+    payment_status = getattr(session, "payment_status", None) or getattr(session, "status", None)
+
+    if not subscription_id:
+        return {"auto_renew": False, "pending": True, "payment_status": payment_status}
+
+    await db.domains.update_one(
+        {"id": domain_id},
+        {"$set": {
+            "auto_renew": True,
+            "stripe_subscription_id": subscription_id,
+            "stripe_customer_id": customer_id,
+            "auto_renew_pending": False,
+            "auto_renew_activated_at": now_iso(),
+            "updated_at": now_iso(),
+        }},
+    )
+    return {"auto_renew": True, "subscription_id": subscription_id}
+
+
+@api_router.post("/domains/{domain_id}/auto-renew/cancel")
+async def cancel_auto_renew_subscription(domain_id: str, user: dict = Depends(current_user)):
+    """Cancel the Stripe subscription at period end. User keeps coverage until expiry."""
+    doc = await db.domains.find_one({"id": domain_id, "user_id": user["id"]}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Domaine introuvable")
+    sub_id = doc.get("stripe_subscription_id")
+    if not sub_id:
+        await db.domains.update_one({"id": domain_id}, {"$set": {"auto_renew": False, "updated_at": now_iso()}})
+        return {"ok": True, "auto_renew": False}
+    if not STRIPE_API_KEY:
+        raise HTTPException(status_code=503, detail="Paiement non configuré")
+    try:
+        await asyncio.to_thread(
+            stripe_sdk.Subscription.modify,
+            sub_id,
+            cancel_at_period_end=True,
+        )
+    except Exception as e:
+        logger.error(f"Stripe subscription cancel failed for {sub_id}: {e}")
+        raise HTTPException(status_code=502, detail="Impossible d'annuler côté Stripe")
+    await db.domains.update_one(
+        {"id": domain_id},
+        {"$set": {
+            "auto_renew": False,
+            "auto_renew_cancelled_at": now_iso(),
+            "updated_at": now_iso(),
+        }},
+    )
+    return {"ok": True, "auto_renew": False, "cancel_at_period_end": True}
+
+
+@api_router.post("/webhook/stripe/subscriptions")
+async def stripe_subscription_webhook(request: Request):
+    """Separate Stripe webhook for subscription events.
+    Events handled: invoice.payment_succeeded (renewal), customer.subscription.updated/deleted,
+    invoice.payment_failed (notify user).
+    """
+    if not STRIPE_API_KEY:
+        return {"ok": False}
+    payload = await request.body()
+    sig = request.headers.get("Stripe-Signature", "")
+
+    event: Any = None
+    if STRIPE_WEBHOOK_SECRET:
+        try:
+            event = stripe_sdk.Webhook.construct_event(payload, sig, STRIPE_WEBHOOK_SECRET)
+        except Exception as e:
+            logger.error(f"Subscription webhook signature verification failed: {e}")
+            raise HTTPException(status_code=400, detail="Invalid signature")
+    else:
+        try:
+            event = json.loads(payload.decode("utf-8"))
+        except Exception as e:
+            logger.error(f"Subscription webhook parse failed: {e}")
+            return {"ok": False}
+
+    def _g(obj: Any, key: str, default: Any = None) -> Any:
+        if isinstance(obj, dict):
+            return obj.get(key, default)
+        return getattr(obj, key, default)
+
+    event_type = _g(event, "type")
+    data = _g(_g(event, "data", {}), "object", {})
+    if not event_type:
+        return {"ok": False}
+
+    if event_type == "invoice.payment_succeeded":
+        sub_id = _g(data, "subscription")
+        if not sub_id:
+            return {"ok": True}
+        doc = await db.domains.find_one({"stripe_subscription_id": sub_id}, {"_id": 0})
+        if not doc:
+            return {"ok": True}
+        billing_reason = _g(data, "billing_reason")
+        if billing_reason == "subscription_create":
+            return {"ok": True}
+        try:
+            current_exp = datetime.fromisoformat(doc.get("expiry_date")) if doc.get("expiry_date") else datetime.now(timezone.utc)
+            if current_exp.tzinfo is None:
+                current_exp = current_exp.replace(tzinfo=timezone.utc)
+            if current_exp < datetime.now(timezone.utc):
+                current_exp = datetime.now(timezone.utc)
+        except Exception:
+            current_exp = datetime.now(timezone.utc)
+        new_exp = (current_exp + timedelta(days=365)).isoformat()
+        await db.domains.update_one(
+            {"id": doc["id"]},
+            {"$set": {
+                "expiry_date": new_exp,
+                "last_renewed_at": now_iso(),
+                "reminders_sent": [],
+                "updated_at": now_iso(),
+            }},
+        )
+        await db.domain_renewals.insert_one({
+            "id": str(uuid.uuid4()),
+            "domain_id": doc["id"],
+            "user_id": doc["user_id"],
+            "domain_name": doc["domain_name"],
+            "amount_cents": _g(data, "amount_paid") or _g(data, "amount_due") or doc.get("amount_cents"),
+            "currency": (_g(data, "currency") or "eur").upper(),
+            "stripe_invoice_id": _g(data, "id"),
+            "stripe_subscription_id": sub_id,
+            "source": "subscription",
+            "status": "applied",
+            "payment_status": "paid",
+            "new_expiry_date": new_exp,
+            "created_at": now_iso(),
+            "updated_at": now_iso(),
+        })
+        logger.info(f"Domain {doc['domain_name']} auto-renewed via sub {sub_id}; new expiry {new_exp}")
+        return {"ok": True}
+
+    if event_type == "customer.subscription.updated":
+        sub_id = _g(data, "id")
+        cancel_at_period_end = bool(_g(data, "cancel_at_period_end"))
+        status = _g(data, "status")
+        update: Dict[str, Any] = {"updated_at": now_iso()}
+        if cancel_at_period_end or status in ("canceled", "unpaid", "incomplete_expired"):
+            update["auto_renew"] = False
+        await db.domains.update_one({"stripe_subscription_id": sub_id}, {"$set": update})
+        return {"ok": True}
+
+    if event_type == "customer.subscription.deleted":
+        sub_id = _g(data, "id")
+        await db.domains.update_one(
+            {"stripe_subscription_id": sub_id},
+            {"$set": {"auto_renew": False, "stripe_subscription_id": None, "updated_at": now_iso()}},
+        )
+        return {"ok": True}
+
+    if event_type == "invoice.payment_failed":
+        sub_id = _g(data, "subscription")
+        if sub_id:
+            doc = await db.domains.find_one({"stripe_subscription_id": sub_id}, {"_id": 0, "id": 1, "domain_name": 1, "user_id": 1})
+            if doc:
+                user_doc = await db.users.find_one({"id": doc["user_id"]}, {"_id": 0, "email": 1})
+                if user_doc and user_doc.get("email"):
+                    try:
+                        await asyncio.to_thread(
+                            _send_email_sync,
+                            user_doc["email"],
+                            f"Paiement échoué pour le renouvellement de {doc['domain_name']}",
+                            f"<p>Le paiement automatique du renouvellement de <b>{doc['domain_name']}</b> a échoué. Merci de mettre à jour votre moyen de paiement dans votre dashboard.</p>",
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to send payment failure email: {e}")
+        return {"ok": True}
+
+    return {"ok": True}
+
+
 # ---- Mount router & CORS ----
 app.include_router(api_router)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
-    allow_methods=["*"],
+allow_origins=json.loads(os.environ.get('CORS_ORIGINS', '["*"]')),    allow_methods=["*"],
     allow_headers=["*"],
 )
 
