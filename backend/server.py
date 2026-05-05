@@ -31,6 +31,8 @@ from emergentintegrations.llm.chat import LlmChat, UserMessage
 from emergentintegrations.payments.stripe.checkout import StripeCheckout, CheckoutSessionRequest
 import stripe as stripe_sdk
 
+
+
 from app_settings_defaults import DEFAULT_APP_SETTINGS
 
 ROOT_DIR = Path(__file__).parent
@@ -2957,10 +2959,13 @@ async def stripe_subscription_webhook(request: Request):
 
 # ---- Mount router & CORS ----
 app.include_router(api_router)
+import json
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-allow_origins=json.loads(os.environ.get('CORS_ORIGINS', '["*"]')),    allow_methods=["*"],
+ 
+    allow_origins=json.loads(os.environ.get('CORS_ORIGINS', '["*"]')),
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
