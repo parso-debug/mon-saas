@@ -2350,10 +2350,11 @@ async def domain_connect_to_project(domain_id: str, body: Dict[str, Any], user: 
 
 # ---- Mount router & CORS ----
 app.include_router(api_router)
+import json
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=json.loads(os.environ.get('CORS_ORIGINS', '["*"]')),
     allow_methods=["*"],
     allow_headers=["*"],
 )
