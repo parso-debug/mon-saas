@@ -215,9 +215,33 @@ function MyDomainRow({ d, fmt, onReload }) {
   const toggleAutoRenew = async () => {
     setTogglingAuto(true);
     try {
-      await api.put(`/domains/${d.id}/auto-renew`, { auto_renew: !d.auto_renew });
-      toast.success(!d.auto_renew ? "Renouvellement auto activé" : "Renouvellement auto désactivé");
-      onReload?.();
+      if (!d.auto_renew) {
+        // Turning ON — try to create a Stripe Subscription first, fall back to simple flag.
+        try {
+          const r = await api.post(`/domains/${d.id}/auto-renew/subscribe`, { origin_url: window.location.origin });
+          window.location.href = r.data.url;
+          return; // redirecting
+        } catch (err) {
+          // Fallback: if Stripe Subscription isn't available in this environment, just toggle the flag.
+          if (err?.response?.status === 502 || err?.response?.status === 503) {
+            await api.put(`/domains/${d.id}/auto-renew`, { auto_renew: true });
+            toast.success("Renouvellement auto activé (mode simple — Stripe Subscription indisponible)");
+            onReload?.();
+          } else {
+            toast.error(err?.response?.data?.detail || "Erreur");
+          }
+        }
+      } else {
+        // Turning OFF — cancel Stripe Subscription if any.
+        if (d.stripe_subscription_id) {
+          await api.post(`/domains/${d.id}/auto-renew/cancel`);
+          toast.success("Renouvellement auto désactivé (fin de période en cours)");
+        } else {
+          await api.put(`/domains/${d.id}/auto-renew`, { auto_renew: false });
+          toast.success("Renouvellement auto désactivé");
+        }
+        onReload?.();
+      }
     } catch (e) {
       toast.error("Erreur");
     } finally {
@@ -268,7 +292,9 @@ function MyDomainRow({ d, fmt, onReload }) {
               className="accent-[#F95A2C]"
               data-testid={`auto-renew-checkbox-${d.domain_name}`}
             />
-            <span className="text-[#52525B]">Renouvellement auto</span>
+            <span className="text-[#52525B]">
+              {togglingAuto ? "…" : d.auto_renew ? (d.stripe_subscription_id ? "Auto · Stripe" : "Auto · actif") : "Renouvellement auto"}
+            </span>
           </label>
         </div>
       )}
