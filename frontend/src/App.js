@@ -23,6 +23,10 @@ import PublicShop from "@/pages/PublicShop";
 import PublicProduct from "@/pages/PublicProduct";
 import ShopCheckout from "@/pages/ShopCheckout";
 import ShopSuccess from "@/pages/ShopSuccess";
+import Domains from "@/pages/Domains";
+import DomainSuccess from "@/pages/DomainSuccess";
+import DomainCancel from "@/pages/DomainCancel";
+import DomainAutoRenewSuccess from "@/pages/DomainAutoRenewSuccess";
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
@@ -55,6 +59,10 @@ export default function App() {
           <Route path="/shop/:slug/product/:productSlug" element={<PublicProduct />} />
           <Route path="/shop/:slug/checkout" element={<ShopCheckout />} />
           <Route path="/shop/:slug/success" element={<ShopSuccess />} />
+          <Route path="/domains" element={<Protected><Domains /></Protected>} />
+          <Route path="/domain/success" element={<Protected><DomainSuccess /></Protected>} />
+          <Route path="/domain/cancel" element={<Protected><DomainCancel /></Protected>} />
+          <Route path="/domain/auto-renew-success" element={<Protected><DomainAutoRenewSuccess /></Protected>} />
           <Route path="/site/:slug" element={<PublicSite />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>

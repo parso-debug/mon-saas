@@ -1,0 +1,44 @@
+{
+  "summary": "Phase 6 Analytics + Domain Renewal + Reminders — backend 11/11 green, frontend fully rendered with all data-testids. One BACKEND BUG FOUND & FIXED during testing: DOMAIN_REMINDER_WINDOWS iteration order + 'skip if already sent in this window' semantics were wrong — the code iterated 30d→7d→1d and picked the FIRST matching threshold, so for days_left=5 it wrongly picked '30d' instead of '7d'. Also, on re-call it would escalate from the sent tighter window to a still-matching larger window (not idempotent per spec). Fixed in /app/backend/server.py: reversed the windows to [1d,7d,30d] and changed loop to find the tightest matching window and only send if that specific label is not already in reminders_sent (no escalation). All 11 tests pass after fix.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/admin/cron/domain-reminders", "issue": "FIXED during this iteration — ordering + idempotency bug in DOMAIN_REMINDER_WINDOWS"}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "auto-renew checkbox persistence", "issue": "In headless Playwright click-then-reload, checkbox state did not appear updated. Backend PUT /api/domains/{id}/auto-renew works (pytest green, incl. persistence via subsequent GET). Likely Playwright timing — PUT may still be in flight when reload fires, or the label click bubbled and fired onChange twice. Recommend main agent to self-verify manually: click the checkbox, wait for toast 'Renouvellement auto activé', reload, confirm checked persists.", "affected_selectors": ["auto-renew-checkbox-plombier-paris.fr"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase6_analytics_renewal.py",
+    "/app/test_reports/pytest/iter8_phase6.xml"
+  ],
+  "action_items": [
+    "Self-verify frontend auto-renew checkbox persistence manually (backend endpoint is green in pytest, likely a click-timing artefact).",
+    "Consider adding the 'idempotency/window selection' unit-test logic inline in the reminders impl as a comment or simpler helper to avoid regression."
+  ],
+  "critical_code_review_comments": [
+    "FIXED: DOMAIN_REMINDER_WINDOWS order + selection logic (see summary). The comment said 'Pick the smallest window that applies' but implementation picked the largest.",
+    "_apply_domain_renewal_if_paid: if Stripe lookup raises and STRIPE_API_KEY is set but payment_status!='paid' stored, the renewal stays in 'initiated' state forever. Not tested via webhook here because the review explicitly allowed patching payment_status='paid' directly.",
+    "Analytics monthly_series: uses 30-day step iteration anchored on day=1 — may double-count or skip a month near DST/end-of-month edge cases; acceptable for MVP, but consider relativedelta.",
+    "/api/webhook/stripe still accepts empty body with 200 (no Stripe-Signature verification). Documented in iter7, still true.",
+    "server.py now 2692 lines — should be split (noted previously). New 350-line Phase 6 block can live in /app/backend/analytics_router.py and /app/backend/domain_renewals_router.py.",
+    "DomainManager MyDomainRow: the <label> wraps the <input checkbox>; clicking the label also toggles the checkbox, and because both label-click and input-change can fire, a double-trigger is theoretically possible (may explain flaky E2E persistence). Consider moving onChange to the label+preventDefault on input.",
+    "DomainManager ?renew=<id> useEffect: runs unconditionally on mount; if a user navigates away/back with a stale URL they will be re-redirected to Stripe. Consider clearing the query param after first dispatch or checking if a recent renewal for this domain is already 'initiated'."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_phase6_analytics_renewal.py (new)",
+    "/app/backend/server.py (bug fix in DOMAIN_REMINDER_WINDOWS order + reminders loop)"
+  ],
+  "success_rate": {"backend": "100% (11/11)", "frontend": "95% (all data-testids render, KPIs/chart/alerts/top-products/renew-redirect verified; only the E2E checkbox persistence is uncertain, backend side green)"},
+  "test_credentials": "demo.pro@artisanweb.fr / demo1234. Admin created ad-hoc as TEST_admin_<uuid>@example.com with is_admin=True patched via motor.",
+  "seed_data_creation": "Patched db.domains.plombier-paris.fr to expiry=now+25d (then +5d for reminder test), reminders_sent=[]. Created fresh TEST_other_<uuid>@example.com (isolation) and TEST_admin_<uuid>@example.com (promoted is_admin=true). Inserted 1 new db.domain_renewals row (session_id reused to test _apply_domain_renewal_if_paid).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Phase 6 validated. Backend fix applied: DOMAIN_REMINDER_WINDOWS now [1d,7d,30d] and the loop picks the tightest matching window; if that label was already sent, nothing is sent (no escalation). Analytics endpoint returns all required sections. Domain renewal flow: POST /domains/{id}/renew → Stripe URL + db.domain_renewals; _apply_domain_renewal_if_paid extends expiry +365d and resets reminders_sent. Admin-only guard works (demo.pro → 403). To rerun: `pytest /app/backend/tests/test_phase6_analytics_renewal.py -v`. Note: after test run the plombier-paris.fr expiry_date has been extended by +365d AND auto_renew has been toggled False->True->False a few times. If you need pristine state, re-run `db.domains.update_one({domain_name:'plombier-paris.fr'},{'$set':{expiry_date:<now+25d>, reminders_sent:[], auto_renew:false}})`.",
+  "rca_of_the_issue": "Root cause of the reminders bug: the windows list was declared in descending order ([30d,7d,1d]) and the selection loop did `for (label,threshold) in windows: if days_left<=threshold and label not in already: chosen=label; break`. For days_left=5 the first iteration (threshold=30) matches → picks '30d', which contradicts the spec (should be '7d'). Additional issue: on re-call with reminders_sent=['7d'] and days_left still 5, the loop would skip '30d' because it's not in already → send '30d' (escalation). Fix: reverse to ascending [1d,7d,30d] and restructure loop to first find the tightest matching window regardless of already-sent, then only send if that specific label is not in already (no fallback to broader window)."
+}

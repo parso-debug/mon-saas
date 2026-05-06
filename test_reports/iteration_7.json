@@ -1,0 +1,34 @@
+{
+  "summary": "Phase 5 Domain Marketplace — backend + frontend end-to-end validation. ALL CHECKS PASS. Backend pytest: 16/16 green in /app/backend/tests/test_domains_marketplace.py covering /api/domains/search (FQDN result + 12 suggestions, .fr=1900c, .com=2400c, .shop=4500c, margin=1000c, google.com unavailable, auth required), /api/domains/purchase (400 invalid, 409 already-owned plombier-paris.fr, 200 + Stripe url + db.domains pending+initiated+mock-registrar+amount_cents+expiry_date~365d), /api/domains/status/{session_id} (after patching db.domains.payment_status='paid' the call activates: status=active, ssl_status=active, ssl_issuer=Let's Encrypt (auto), registrar_order_id=MOCK-XXXX, dns_config with A @ / A www / CAA @, 404 for unknown session), auto-attach to db.sites.{project_id} (custom_domain set, domain_verified=true, domain_token=null), /api/domains user-scoped, /api/domains/{id}/connect re-attach to a 2nd site, and /api/webhook/stripe returns 200 on empty body. Frontend Playwright (logged in demo.pro): nav-domains href=/domains visible on Dashboard, /domains renders domains-page + domain-manager + domain-search-input, my-domains contains my-domain-plombier-paris.fr with domain-state-active. Typing 'monatelier' (>2 chars + 400ms debounce) loads exactly 12 cards under domain-suggestions; available cards expose buy-{fqdn} (e.g. monatelier.fr/.com/.boutique) and taken cards expose unavailable-{fqdn} (e.g. monatelier.shop, boutique-lyon.fr, boutiquelyon.com). Clicking buy-monatelier.boutique POSTs /api/domains/purchase and window.location.href redirects to checkout.stripe.com/c/pay/cs_test_... (verified live). /domain/success?session_id=<plombier-paris.fr session> polls /api/domains/status, then shows domain-success-card with the domain name, 'SSL Let's Encrypt (auto)', dns-records details containing A @, A www, CAA @, visit-domain-btn, back-to-dashboard. /domain/cancel renders domain-cancel + domain-cancel-retry. Stripe checkout page reachable in test mode (sk_test_emergent).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_domains_marketplace.py",
+    "/app/test_reports/pytest/iter7_domains.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py >2300 lines — DOMAIN MARKETPLACE block (~400 lines) should be extracted to /app/backend/domains_router.py for maintainability (split rule >700 lines).",
+    "_apply_domain_purchase_if_paid: when registrar mock fails the function returns early after writing status='error', but the partial 'update' dict still carries dns_config/ssl_status set in subsequent lines — current code path is fine because the error branch returns first, but a refactor that reorders the steps could leak. Add a unit guard.",
+    "/api/webhook/stripe accepts unsigned bodies and returns 200 — acceptable for MVP with mocked registrar but document that the real webhook will need Stripe-Signature validation before going live with real money.",
+    "_is_available_mock uses a deterministic hash modulo 4 → ~25% of names appear taken. Good for demo but confusing if a user retries the SAME unavailable name with same TLD repeatedly. Consider showing a hint 'try another extension'.",
+    "DomainPurchaseIn.origin_url is trusted as-is for success_url/cancel_url — should be validated against an allow-list of host(s) to prevent open redirect via Stripe success page (low risk because it's the user's own browser, but still).",
+    "Demo seed for plombier-paris.fr already has a stripe_session_id of an old test session; if the demo is re-seeded via a different cs_test_* the old success page link breaks. Acceptable for demo only.",
+    "Front DomainManager: debounce=400ms is fine; consider abort-controller on previous request to avoid out-of-order suggestions on slow networks.",
+    "DomainSuccess polling loop should expose a hard timeout + retry button (currently relies on user reload if status=pending forever)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_domains_marketplace.py (new pytest module — reusable for future regression)"
+  ],
+  "success_rate": {"backend": "100% (16/16)", "frontend": "100% on the 11 acceptance criteria"},
+  "test_credentials": "demo.pro@artisanweb.fr / demo1234 (Pro, owns plombier-paris.fr active). Fresh accounts created ad-hoc as TEST_dom_<ts>@example.com / testpass123.",
+  "seed_data_creation": "During backend tests we (a) registered ~2 fresh users TEST_dom_<ts>@example.com, (b) inserted 2 sites directly into Mongo for those users (since /api/sites only has /generate which calls Claude), (c) inserted ~3 db.domains rows (test-<ts>.fr, atelier-<ts>.fr) all marked active. None of this affects the demo user.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All 11 features in the review_request are validated. Backend is reusable: run `pytest /app/backend/tests/test_domains_marketplace.py -v`. The harness simulates Stripe-paid via a direct Mongo update (db.domains.update_one({stripe_session_id:X},{'$set':{'payment_status':'paid'}})) because the test environment's get_checkout_status often fails — _apply_domain_purchase_if_paid already prefers the stored payment_status, so this works deterministically. For frontend retests, the demo user's plombier-paris.fr session_id is `cs_test_a1nG7IpUlbFB2D1eMFLGXCpDYwL2SWBsvnorCj0LzFJwMQitLasQqf7H7c` (verified). hashlib mock means ~25% of generated suggestions show 'unavailable-{fqdn}'. The TLD set in _tld_price covers fr/com/shop/boutique/eu/net/bzh/paris; everything else falls back to the default 1200+1000.",
+  "rca_of_the_issue": "No bugs encountered. Initial pytest setup hit a transient ReadTimeout against the preview ingress and the register response uses 'access_token' not 'token' — both fixed in the test harness with retries + access_token fallback. No backend or frontend code change was required."
+}
