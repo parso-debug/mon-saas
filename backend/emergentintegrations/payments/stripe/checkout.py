@@ -35,6 +35,7 @@ class StripeCheckout:
     def __init__(self, api_key: str, webhook_url: str = ""):
         self.api_key = api_key
         self.webhook_url = webhook_url
+        self._client = stripe_sdk.StripeClient(api_key)
 
     async def create_checkout_session(
         self, req: CheckoutSessionRequest
@@ -42,23 +43,24 @@ class StripeCheckout:
         """Create a Stripe checkout session and return its ID and redirect URL."""
         amount_cents = int(round(req.amount * 100))
         session = await asyncio.to_thread(
-            stripe_sdk.checkout.Session.create,
-            api_key=self.api_key,
-            mode="payment",
-            payment_method_types=["card"],
-            line_items=[
-                {
-                    "quantity": 1,
-                    "price_data": {
-                        "currency": req.currency.lower(),
-                        "unit_amount": amount_cents,
-                        "product_data": {"name": "Payment"},
-                    },
-                }
-            ],
-            success_url=req.success_url,
-            cancel_url=req.cancel_url,
-            metadata=req.metadata or {},
+            self._client.checkout.sessions.create,
+            params={
+                "mode": "payment",
+                "payment_method_types": ["card"],
+                "line_items": [
+                    {
+                        "quantity": 1,
+                        "price_data": {
+                            "currency": req.currency.lower(),
+                            "unit_amount": amount_cents,
+                            "product_data": {"name": "Payment"},
+                        },
+                    }
+                ],
+                "success_url": req.success_url,
+                "cancel_url": req.cancel_url,
+                "metadata": req.metadata or {},
+            },
         )
         return CheckoutSessionResponse(
             session_id=session.id,
@@ -68,9 +70,8 @@ class StripeCheckout:
     async def get_checkout_status(self, session_id: str) -> CheckoutStatusResponse:
         """Retrieve the current status of a Stripe checkout session."""
         session = await asyncio.to_thread(
-            stripe_sdk.checkout.Session.retrieve,
+            self._client.checkout.sessions.retrieve,
             session_id,
-            api_key=self.api_key,
         )
         return CheckoutStatusResponse(
             session_id=session.id,
