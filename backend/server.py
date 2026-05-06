@@ -26,16 +26,7 @@ import secrets as _secrets
 import dns.resolver
 import dns.exception
 
-# from emergentintegrations.llm.chat import LlmChat, UserMessage
-# from emergentintegrations.payments.stripe.checkout import StripeCheckout, CheckoutSessionRequest
-# --- Dummies pour Railway (l'IA et Stripe seront désactivés temporairement)
-class LlmChat: 
-    def __init__(self, *a, **k): pass
-class UserMessage:
-    def __init__(self, *a, **k): pass
-class StripeCheckout:
-    def __init__(self, *a, **k): pass
-class CheckoutSessionRequest: pass
+from emergentintegrations.payments.stripe.checkout import StripeCheckout, CheckoutSessionRequest
 
 from app_settings_defaults import DEFAULT_APP_SETTINGS
 
