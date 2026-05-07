@@ -2983,7 +2983,7 @@ class DomainSearchOut(BaseModel):
     is_premium: bool
 
 @api_router.post("/domains/search", response_model=List[DomainSearchOut])
-async def search_domains(body: DomainSearchIn, user: dict = Depends(get_current_user)):
+async def search_domains(body: DomainSearchIn, user: dict = Depends(current_user)):
     if not body.suggestions:
         raise HTTPException(400, "suggestions cannot be empty")
     domains_to_check = body.suggestions[:10]
