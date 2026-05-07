@@ -3007,3 +3007,22 @@ async def search_domains(body: DomainSearchIn, user: dict = Depends(get_current_
         return response
     except Exception as e:
         raise HTTPException(500, f"Registrar error: {str(e)}")
+
+
+# ---- Mount router & CORS ----
+app.include_router(api_router)
+app.add_middleware(
+    CORSMiddleware,
+    allow_credentials=True,
+    allow_origins=json.loads(os.environ.get('CORS_ORIGINS', '["*"]')),
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.on_event("shutdown")
+async def shutdown_db_client():
+    client.close()
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
