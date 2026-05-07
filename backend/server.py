@@ -24,6 +24,7 @@ import bcrypt
 import jwt as pyjwt
 import resend
 import requests as rq
+import stripe as stripe_sdk
 import secrets as _secrets
 import dns.resolver
 import dns.exception
@@ -49,7 +50,7 @@ SENDER_EMAIL = os.environ.get('SENDER_EMAIL', 'onboarding@resend.dev')
 if RESEND_API_KEY:
     resend.api_key = RESEND_API_KEY
 
-STRIPE_API_KEY = os.environ.get('STRIPE_API_KEY', '')
+STRIPE_API_KEY = os.environ.get('STRIPE_SECRET_KEY', '')
 STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
 if STRIPE_API_KEY:
     stripe_sdk.api_key = STRIPE_API_KEY
