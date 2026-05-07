@@ -1,8 +1,9 @@
-import json
 """
 ArtisanWeb SaaS - Website-as-a-Service backend
 FastAPI + MongoDB + JWT auth + Claude Sonnet 4.5 (content) + Gemini Nano Banana (images)
 """
+import json
+from services.registrar.namecheap import NamecheapClient
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, UploadFile, File, Form
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
@@ -2969,3 +2970,39 @@ app.add_middleware(
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
+
+class DomainSearchIn(BaseModel):
+    suggestions: List[str]
+
+class DomainSearchOut(BaseModel):
+    domain: str
+    available: bool
+    price_eur: float
+    cost_usd: float
+    is_premium: bool
+
+@api_router.post("/domains/search", response_model=List[DomainSearchOut])
+async def search_domains(body: DomainSearchIn, user: dict = Depends(get_current_user)):
+    if not body.suggestions:
+        raise HTTPException(400, "suggestions cannot be empty")
+    domains_to_check = body.suggestions[:10]
+    try:
+        registrar = NamecheapClient()
+        results = await registrar.check_domains(domains_to_check)
+        tld = domains_to_check[0].split(".")[-1]
+        pricing = await registrar.get_domain_price(tld)
+        cost_usd = pricing["register_usd"]
+        USD_TO_EUR = 0.92
+        sell_price_eur = 19.00
+        response = []
+        for r in results:
+            response.append(DomainSearchOut(
+                domain=r["domain"],
+                available=r["available"],
+                price_eur=sell_price_eur if r["available"] else 0,
+                cost_usd=cost_usd,
+                is_premium=r["is_premium"]
+            ))
+        return response
+    except Exception as e:
+        raise HTTPException(500, f"Registrar error: {str(e)}")
