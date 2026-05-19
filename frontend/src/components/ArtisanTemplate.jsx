@@ -5,6 +5,16 @@ import { resolveImg } from "@/lib/api";
 import { DEFAULT_THEME, ensureGoogleFontsLoaded } from "@/components/ThemePicker";
 import { DEFAULT_SECTION_ORDER } from "@/components/SectionsReorder";
 
+const HERO_BY_JOB = {
+  'paysagiste': 'https://images.unsplash.com/photo-1557429287-b2e26467fc2b?q=80&w=1200', // jardin
+  'plâtrier': 'https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?q=80&w=1200', // plâtrerie
+  'carreleur': 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?q=80&w=1200',
+  'menuisier': 'https://images.unsplash.com/photo-1594223274512-ad4803739b7c?q=80&w=1200',
+  'plombier': 'https://images.unsplash.com/photo-1607472586893-edb57bdc0e39?q=80&w=1200',
+  'électricien': 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?q=80&w=1200',
+  'peintre': 'https://images.unsplash.com/photo-1562259949-e8e7689d7828?q=80&w=1200'
+};
+
 const Icon = ({ name, className }) => {
   const pascal = (name || "").split(/[-_]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join("");
   const Cmp = Lucide[pascal] || Lucide.Sparkles;
@@ -61,7 +71,9 @@ export default function ArtisanTemplate({ site, onSubmitLead, editable = false, 
     );
   };
 
-  const heroImage = resolveImg(site.hero_image_url) || "https://images.pexels.com/photos/7492582/pexels-photo-7492582.jpeg";
+  const heroFallback = "https://images.pexels.com/photos/7492582/pexels-photo-7492582.jpeg";
+  const jobKey = (site.business_type || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const heroImage = resolveImg(site.hero_image_url) || HERO_BY_JOB[jobKey] || heroFallback;
   const service1Img = "https://images.pexels.com/photos/4756489/pexels-photo-4756489.jpeg";
   const service2Img = "https://images.unsplash.com/photo-1769736436759-1c43688ef899?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzV8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBob21lJTIwcmVub3ZhdGlvbiUyMGludGVyaW9yfGVufDB8fHx8MTc3NzUwNzY5MXww&ixlib=rb-4.1.0&q=85";
 
