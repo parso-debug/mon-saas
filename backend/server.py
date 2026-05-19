@@ -457,13 +457,13 @@ async def generate_content_with_claude(payload: GenerateSiteIn) -> Dict[str, Any
     if not EMERGENT_LLM_KEY:
         return _fallback_content(payload)
     try:
-        chat = LlmChat(
+        chat = LlmChat(    # type: ignore
             api_key=EMERGENT_LLM_KEY,
             session_id=f"gen-{uuid.uuid4()}",
             system_message=SYSTEM_PROMPT,
         ).with_model("anthropic", "claude-sonnet-4-5-20250929")
 
-        msg = UserMessage(text=build_content_prompt(payload))
+        msg = UserMessage(text=build_content_prompt(payload)) # type: ignore
         text_response = await chat.send_message(msg)
         # Strip potential markdown fences
         text_response = text_response.strip()
