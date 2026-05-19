@@ -1059,6 +1059,7 @@ async def billing_checkout(body: CheckoutIn, user: dict = Depends(current_user))
 
     stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=webhook_url)
     metadata = {
+        "kind": "pro",
         "user_id": user["id"],
         "user_email": user["email"],
         "package_id": body.package_id,
@@ -3007,22 +3008,3 @@ async def search_domains(body: DomainSearchIn, user: dict = Depends(current_user
         return response
     except Exception as e:
         raise HTTPException(500, f"Registrar error: {str(e)}")
-
-
-# ---- Mount router & CORS ----
-app.include_router(api_router)
-app.add_middleware(
-    CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=json.loads(os.environ.get('CORS_ORIGINS', '["*"]')),
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)

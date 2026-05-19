@@ -19,4 +19,9 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+export const searchDomains = async (suggestions) => {
+  const { data } = await api.post('/domains/search', { suggestions })
+  return data
+}
+
 export default api;
