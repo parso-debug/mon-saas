@@ -84,39 +84,115 @@ export default function ArtisanTemplate({ site, onSubmitLead, editable = false, 
   };
 
   const SERVICES_BY_JOB = {
-    'paysagiste': [
-      'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?q=80&w=1200',
-      'https://images.unsplash.com/photo-1523348837708-15d4a09cfac2?q=80&w=1200'
+    plomberie: [
+      {title:"Dépannage fuite", image:"https://images.unsplash.com/photo-1581244277943-fe4a9c777189?q=80&w=1200"},
+      {title:"Installation sanitaire", image:"https://images.unsplash.com/photo-1607472586893-edb57bdc0e39?q=80&w=1200"},
+      {title:"Chauffe-eau", image:"https://images.unsplash.com/photo-1621905251189-08b45d6a269e?q=80&w=1200"},
+      {title:"Débouchage canalisation", image:"https://images.unsplash.com/photo-1632936233735-44b2d48f38af?q=80&w=1200"},
+      {title:"Rénovation salle de bain", image:"https://images.unsplash.com/photo-1620626011761-996317b8d101?q=80&w=1200"}
     ],
-    'platrier': [
-      'https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?q=80&w=1200',
-      'https://images.unsplash.com/photo-1503387762-592deb58ef4e?q=80&w=1200'
+    electricite: [
+      {title:"Dépannage électrique", image:"https://images.unsplash.com/photo-1621905252507-b35492cc74b4?q=80&w=1200"},
+      {title:"Tableau électrique", image:"https://images.unsplash.com/photo-1555963966-b7ae5404b6ed?q=80&w=1200"},
+      {title:"Installation luminaires", image:"https://images.unsplash.com/photo-1513506003901-1e6a229e2d15?q=80&w=1200"},
+      {title:"Prises et interrupteurs", image:"https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?q=80&w=1200"},
+      {title:"Mise aux normes", image:"https://images.unsplash.com/photo-1497366811353-26f4fa2001e4?q=80&w=1200"}
     ],
-    'carreleur': [
-      'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?q=80&w=1200',
-      'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=1200'
+    maconnerie: [
+      {title:"Construction murs", image:"https://images.unsplash.com/photo-1504307651254-35680f356dfd?q=80&w=1200"},
+      {title:"Ouverture mur porteur", image:"https://images.unsplash.com/photo-1541888946425-d81bb19240f5?q=80&w=1200"},
+      {title:"Dalle béton", image:"https://images.unsplash.com/photo-1503387762-592deb58ef4e?q=80&w=1200"},
+      {title:"Ravalement façade", image:"https://images.unsplash.com/photo-1560518883-ce09059eeffa?q=80&w=1200"},
+      {title:"Terrasse maçonnée", image:"https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=1200"}
     ],
-    'menuisier': [
-      'https://images.unsplash.com/photo-1594223274512-ad4803739b7c?q=80&w=1200',
-      'https://images.unsplash.com/photo-1601562236203-261b587f57f5?q=80&w=1200'
+    peinture: [
+      {title:"Peinture intérieure", image:"https://images.unsplash.com/photo-1562259949-e8e7689d7828?q=80&w=1200"},
+      {title:"Peinture extérieure", image:"https://images.unsplash.com/photo-1589939705384-5185137a7f0f?q=80&w=1200"},
+      {title:"Enduits décoratifs", image:"https://images.unsplash.com/photo-1618220179428-22790b461013?q=80&w=1200"},
+      {title:"Papier peint", image:"https://images.unsplash.com/photo-1616046229478-9901c5536a45?q=80&w=1200"},
+      {title:"Rénovation boiseries", image:"https://images.unsplash.com/photo-1593696140826-c58b021acf8b?q=80&w=1200"}
     ],
-    'plombier': [
-      'https://images.unsplash.com/photo-1607472586893-edb57bdc0e39?q=80&w=1200',
-      'https://images.unsplash.com/photo-1631643553547-5e6c9d7f2e06?q=80&w=1200'
+    menuiserie: [
+      {title:"Pose fenêtres", image:"https://images.unsplash.com/photo-1509644851169-2acc08aa25b5?q=80&w=1200"},
+      {title:"Portes sur mesure", image:"https://images.unsplash.com/photo-1558030006-450675393462?q=80&w=1200"},
+      {title:"Parquet", image:"https://images.unsplash.com/photo-1581858726788-75bc0f6a952d?q=80&w=1200"},
+      {title:"Escalier bois", image:"https://images.unsplash.com/photo-1505691938895-1758d7feb511?q=80&w=1200"},
+      {title:"Aménagement placard", image:"https://images.unsplash.com/photo-1595428774223-ef52624120d2?q=80&w=1200"}
     ],
-    'electricien': [
-      'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?q=80&w=1200',
-      'https://images.unsplash.com/photo-1581092160562-40aa08e78837?q=80&w=1200'
+    chauffage: [
+      {title:"Chaudière gaz", image:"https://images.unsplash.com/photo-1621905251189-08b45d6a269e?q=80&w=1200"},
+      {title:"Pompe à chaleur", image:"https://images.unsplash.com/photo-1581092160562-40aa08e78837?q=80&w=1200"},
+      {title:"Radiateurs", image:"https://images.unsplash.com/photo-1558618666-fcd25c85cd64?q=80&w=1200"},
+      {title:"Entretien chaudière", image:"https://images.unsplash.com/photo-1504328345606-18bbc8c9d7d1?q=80&w=1200"},
+      {title:"Plancher chauffant", image:"https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?q=80&w=1200"}
     ],
-    'peintre': [
-      'https://images.unsplash.com/photo-1562259949-e8e7689d7828?q=80&w=1200',
-      'https://images.unsplash.com/photo-1519710164239-da123dc03ef4?q=80&w=1200'
+    couverture: [
+      {title:"Réfection toiture", image:"https://images.unsplash.com/photo-1632759145351-1d5920a9e6e0?q=80&w=1200"},
+      {title:"Tuiles et ardoises", image:"https://images.unsplash.com/photo-1513584684374-8bab748fbf90?q=80&w=1200"},
+      {title:"Étanchéité", image:"https://images.unsplash.com/photo-1621155346337-1d19476ba7d6?q=80&w=1200"},
+      {title:"Zinguerie", image:"https://images.unsplash.com/photo-1600585154526-990dced4db0d?q=80&w=1200"},
+      {title:"Isolation combles", image:"https://images.unsplash.com/photo-1605276374104-dee2a0ed3cd6?q=80&w=1200"}
+    ],
+    carrelage: [
+      {title:"Carrelage sol", image:"https://images.unsplash.com/photo-1584622650111-993a426fbf0a?q=80&w=1200"},
+      {title:"Faïence murale", image:"https://images.unsplash.com/photo-1620626011761-996317b8d101?q=80&w=1200"},
+      {title:"Carrelage extérieur", image:"https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea?q=80&w=1200"},
+      {title:"Chape", image:"https://images.unsplash.com/photo-1503387762-592deb58ef4e?q=80&w=1200"},
+      {title:"Pierre naturelle", image:"https://images.unsplash.com/photo-1600607687644-c7171b42498b?q=80&w=1200"}
+    ],
+    paysagiste: [
+      {title:"Entretien de jardin", image:"https://images.unsplash.com/photo-1416879595882-3373a0480b5b?q=80&w=1200"},
+      {title:"Taille de haies", image:"https://images.unsplash.com/photo-1599685315640-3d355e5e59d1?q=80&w=1200"},
+      {title:"Création de massifs", image:"https://images.unsplash.com/photo-1558618666-fcd25c85cd64?q=80&w=1200"},
+      {title:"Tonte de pelouse", image:"https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?q=80&w=1200"},
+      {title:"Élagage", image:"https://images.unsplash.com/photo-1501003878151-d3cb87799705?q=80&w=1200"}
+    ],
+    serrurerie: [
+      {title:"Ouverture de porte", image:"https://images.unsplash.com/photo-1582139329536-e2d5c7280bcf?q=80&w=1200"},
+      {title:"Changement serrure", image:"https://images.unsplash.com/photo-1558618666-fcd25c85cd64?q=80&w=1200"},
+      {title:"Blindage porte", image:"https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?q=80&w=1200"},
+      {title:"Volets roulants", image:"https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?q=80&w=1200"},
+      {title:"Dépannage 24/7", image:"https://images.unsplash.com/photo-1504328345606-18bbc8c9d7d1?q=80&w=1200"}
+    ],
+    platrerie: [
+      {title:"Pose de placo", image:"https://images.unsplash.com/photo-1503387762-592deb58ef4e?q=80&w=1200"},
+      {title:"Cloisons", image:"https://images.unsplash.com/photo-1541888946425-d81bb19240f5?q=80&w=1200"},
+      {title:"Faux plafonds", image:"https://images.unsplash.com/photo-1600607687644-c7171b42498b?q=80&w=1200"},
+      {title:"Isolation phonique", image:"https://images.unsplash.com/photo-1605276374104-dee2a0ed3cd6?q=80&w=1200"},
+      {title:"Enduits", image:"https://images.unsplash.com/photo-1618220179428-22790b461013?q=80&w=1200"}
+    ],
+    renovation: [
+      {title:"Rénovation complète", image:"https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=1200"},
+      {title:"Cuisine", image:"https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?q=80&w=1200"},
+      {title:"Salle de bain", image:"https://images.unsplash.com/photo-1620626011761-996317b8d101?q=80&w=1200"},
+      {title:"Aménagement intérieur", image:"https://images.unsplash.com/photo-1616046229478-9901c5536a45?q=80&w=1200"},
+      {title:"Peinture et sols", image:"https://images.unsplash.com/photo-1562259949-e8e7689d7828?q=80&w=1200"}
+    ],
+    climatisation: [
+      {title:"Installation clim", image:"https://images.unsplash.com/photo-1581092160562-40aa08e78837?q=80&w=1200"},
+      {title:"Entretien clim", image:"https://images.unsplash.com/photo-1621905252507-b35492cc74b4?q=80&w=1200"},
+      {title:"Pompe à chaleur air-air", image:"https://images.unsplash.com/photo-1504328345606-18bbc8c9d7d1?q=80&w=1200"},
+      {title:"Dépannage", image:"https://images.unsplash.com/photo-1581244277943-fe4a9c777189?q=80&w=1200"},
+      {title:"Désembuage", image:"https://images.unsplash.com/photo-1558618666-fcd25c85cd64?q=80&w=1200"}
+    ],
+    jardinage: [
+      {title:"Tonte", image:"https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?q=80&w=1200"},
+      {title:"Désherbage", image:"https://images.unsplash.com/photo-1416879595882-3373a0480b5b?q=80&w=1200"},
+      {title:"Taille arbustes", image:"https://images.unsplash.com/photo-1599685315640-3d355e5e59d1?q=80&w=1200"},
+      {title:"Entretien massifs", image:"https://images.unsplash.com/photo-1558618666-fcd25c85cd64?q=80&w=1200"},
+      {title:"Ramassage feuilles", image:"https://images.unsplash.com/photo-1501003878151-d3cb87799705?q=80&w=1200"}
+    ],
+    nettoyage: [
+      {title:"Nettoyage fin de chantier", image:"https://images.unsplash.com/photo-1581578731548-c64695cc6952?q=80&w=1200"},
+      {title:"Vitres", image:"https://images.unsplash.com/photo-1600880292203-757bb62b4baf?q=80&w=1200"},
+      {title:"Bureaux", image:"https://images.unsplash.com/photo-1497366811353-26f4fa2001e4?q=80&w=1200"},
+      {title:"Copropriétés", image:"https://images.unsplash.com/photo-1560518883-ce09059eeffa?q=80&w=1200"},
+      {title:"Dégraissage", image:"https://images.unsplash.com/photo-1558618666-fcd25c85cd64?q=80&w=1200"}
     ]
   };
-
   const heroImage = resolveImg(site.hero_image_url) || HERO_BY_JOB[jobKey] || "https://images.pexels.com/photos/7492582/pexels-photo-7492582.jpeg";
-  const service1Img = SERVICES_BY_JOB[jobKey]?.[0] || "https://images.pexels.com/photos/4756489/pexels-photo-4756489.jpeg";
-  const service2Img = SERVICES_BY_JOB[jobKey]?.[1] || "https://images.unsplash.com/photo-1769736436759-1c43688ef899?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzV8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBob21lJTIwcmVub3ZhdGlvbiUyMGludGVyaW9yfGVufDB8fHx8MTc3NzUwNzY5MXww&ixlib=rb-4.1.0&q=85";
+  const service1Img = SERVICES_BY_JOB[jobKey]?.[0]?.image || SERVICES_BY_JOB[jobKey]?.[0] || "https://images.pexels.com/photos/4756489/pexels-photo-4756489.jpeg";
+  const service2Img = SERVICES_BY_JOB[jobKey]?.[1]?.image || SERVICES_BY_JOB[jobKey]?.[1] || "https://images.unsplash.com/photo-1769736436759-1c43688ef899?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzV8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBob21lJTIwcmVub3ZhdGlvbiUyMGludGVyaW9yfGVufDB8fHx8MTc3NzUwNzY5MXww&ixlib=rb-4.1.0&q=85";
 
   // ---------- Sections (rendered conditionally based on sectionOrder) ----------
 
