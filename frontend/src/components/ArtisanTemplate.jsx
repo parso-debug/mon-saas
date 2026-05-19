@@ -24,7 +24,13 @@ export default function ArtisanTemplate({ site, onSubmitLead, editable = false, 
   const [sent, setSent] = useState(false);
   const [sending, setSending] = useState(false);
 
-  const theme = { ...DEFAULT_THEME, ...(site.theme || {}) };
+  const STYLE_PRESETS = {
+    moderne: { primary_color: '#1F3D2D', accent_color: '#C84B31', font_heading: 'Instrument Serif', font_body: 'Manrope' },
+    premium: { primary_color: '#0A0A0A', accent_color: '#C9A86A', font_heading: 'Playfair Display', font_body: 'Inter' },
+    minimaliste: { primary_color: '#111827', accent_color: '#6B7280', font_heading: 'Inter', font_body: 'Inter' }
+  };
+
+  const theme = { ...DEFAULT_THEME, ...(STYLE_PRESETS[(site.style || '').toLowerCase()] || {}), ...(site.theme || {}) };
   const sectionOrder = (site.section_order && site.section_order.length ? site.section_order : DEFAULT_SECTION_ORDER);
 
   useEffect(() => { ensureGoogleFontsLoaded(); }, []);
