@@ -20,6 +20,24 @@ const TRADES = [
   "Plâtrerie", "Rénovation", "Climatisation", "Jardinage", "Nettoyage",
 ];
 
+const SERVICES_BY_TRADE = {
+  "Plomberie": ["Dépannage fuite", "Installation sanitaire", "Chauffe-eau", "Débouchage canalisation", "Rénovation salle de bain"],
+  "Électricité": ["Dépannage électrique", "Tableau électrique", "Installation luminaires", "Prises et interrupteurs", "Mise aux normes"],
+  "Maçonnerie": ["Construction murs", "Ouverture mur porteur", "Dalle béton", "Ravalement façade", "Terrasse maçonnée"],
+  "Peinture": ["Peinture intérieure", "Peinture extérieure", "Enduits décoratifs", "Papier peint", "Rénovation boiseries"],
+  "Menuiserie": ["Pose fenêtres", "Portes sur mesure", "Parquet", "Escalier bois", "Aménagement placard"],
+  "Chauffage": ["Chaudière gaz", "Pompe à chaleur", "Radiateurs", "Entretien chaudière", "Plancher chauffant"],
+  "Couverture": ["Réfection toiture", "Tuiles et ardoises", "Étanchéité", "Zinguerie", "Isolation combles"],
+  "Carrelage": ["Carrelage sol", "Faïence murale", "Carrelage extérieur", "Chape", "Pierre naturelle"],
+  "Paysagiste": ["Entretien de jardin", "Taille de haies", "Création de massifs", "Tonte de pelouse", "Élagage"],
+  "Serrurerie": ["Ouverture de porte", "Changement serrure", "Blindage porte", "Volets roulants", "Dépannage 24/7"],
+  "Plâtrerie": ["Pose de placo", "Cloisons", "Faux plafonds", "Isolation phonique", "Enduits"],
+  "Rénovation": ["Rénovation complète", "Cuisine", "Salle de bain", "Aménagement intérieur", "Peinture et sols"],
+  "Climatisation": ["Installation clim", "Entretien clim", "Pompe à chaleur air-air", "Dépannage", "Désembuage"],
+  "Jardinage": ["Tonte", "Désherbage", "Taille arbustes", "Entretien massifs", "Ramassage feuilles"],
+  "Nettoyage": ["Nettoyage fin de chantier", "Vitres", "Bureaux", "Copropriétés", "Dégraissage"]
+};
+
 export default function Onboarding() {
   const nav = useNavigate();
   const [step, setStep] = useState(1);
@@ -99,7 +117,13 @@ export default function Onboarding() {
                 <Label className="font-mono-grotesk text-[10px] uppercase tracking-[0.2em] text-[#71717A]">Métier / Activité</Label>
                 <div className="flex flex-wrap gap-2 mt-2 mb-3">
                   {TRADES.map((t) => (
-                    <button key={t} type="button" onClick={() => set("business_type", t)} data-testid={`trade-${t}`}
+                    <button key={t} type="button" onClick={() => {
+                      set("business_type", t);
+                      if (data.services.length === 0) {
+                        const preset = SERVICES_BY_TRADE[t] || [];
+                        if (preset.length) set("services", preset);
+                      }
+                    }} data-testid={`trade-${t}`}
                       className={`px-3 py-1.5 text-xs border transition-colors ${data.business_type === t ? "bg-[#09090B] text-white border-[#09090B]" : "bg-white border-black/20 hover:border-[#F95A2C]"}`}>
                       {t}
                     </button>
