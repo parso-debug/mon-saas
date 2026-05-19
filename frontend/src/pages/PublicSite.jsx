@@ -27,6 +27,37 @@ export default function PublicSite() {
         };
         if (c.seo_description) setMeta("description", c.seo_description);
         if (c.seo_keywords) setMeta("keywords", c.seo_keywords.join(", "));
+
+        const setProp = (property, content) => {
+          if (!content) return;
+          let m = document.querySelector(`meta[property="${property}"]`);
+          if (!m) { m = document.createElement("meta"); m.setAttribute("property", property); document.head.appendChild(m); }
+          m.setAttribute("content", content);
+        };
+        setProp("og:title", document.title);
+        setProp("og:description", c.seo_description);
+        setProp("og:type", "website");
+        setProp("og:url", window.location.href);
+        setProp("og:image", r.data.hero_image_url);
+
+        let ld = document.getElementById("ld-json");
+        if (!ld) {
+          ld = document.createElement("script");
+          ld.id = "ld-json";
+          ld.type = "application/ld+json";
+          document.head.appendChild(ld);
+        }
+        ld.textContent = JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "LocalBusiness",
+          name: r.data.business_name,
+          telephone: r.data.phone,
+          address: {
+            "@type": "PostalAddress",
+            addressLocality: r.data.city
+          },
+          url: window.location.href
+        });
       })
       .catch(() => setError("Site introuvable"))
       .finally(() => setLoading(false));

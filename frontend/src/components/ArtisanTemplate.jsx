@@ -88,7 +88,7 @@ export default function ArtisanTemplate({ site, onSubmitLead, editable = false, 
           </div>
         </div>
         <div className="relative min-h-[400px] md:min-h-full bg-[#E5E1D8]">
-          <img src={heroImage} alt={`${site.business_type} ${site.city}`} className="absolute inset-0 w-full h-full object-cover" />
+          <img src={heroImage} alt={`${site.business_name} - ${site.business_type} à ${site.city}`} loading="eager" fetchpriority="high" decoding="async" width="1200" height="800" className="absolute inset-0 w-full h-full object-cover" />
           <div className="absolute bottom-6 left-6 right-6 md:bottom-10 md:left-10 md:right-10 bg-[#FDFBF7]/95 backdrop-blur p-5 rounded-md border border-[#E5E1D8] max-w-sm">
             <div className="font-manrope text-[10px] uppercase tracking-[0.2em] text-[#6B7280] mb-1">Notre engagement</div>
             <div className="font-serif-instrument italic text-xl text-[#111827] leading-tight">« {c.why_us?.[0] || "Travail soigné, délais respectés."} »</div>
@@ -132,7 +132,7 @@ export default function ArtisanTemplate({ site, onSubmitLead, editable = false, 
           {(c.services || []).map((s, i) => (
             <article key={i} className="bg-[#F3F1EC] rounded-lg overflow-hidden group hover:shadow-md transition-shadow" data-testid={`service-${i}`}>
               <div className="aspect-[16/10] overflow-hidden bg-[#E5E1D8]">
-                <img src={i % 2 === 0 ? service1Img : service2Img} alt={s.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                <img src={i % 2 === 0 ? service1Img : service2Img} alt={s.name} loading="lazy" decoding="async" width="800" height="500" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
               </div>
               <div className="p-7">
                 <div className="font-manrope text-[10px] uppercase tracking-[0.2em] text-[#C84B31] mb-2">Service / 0{i + 1}</div>
@@ -308,6 +308,11 @@ export default function ArtisanTemplate({ site, onSubmitLead, editable = false, 
           </a>
         </div>
       </header>
+
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-[#FDFBF7] border-t border-[#E5E1D8] p-3 z-40 flex gap-2">
+        <a href={`tel:${site.phone}`} className="flex-1 bg-[#1F3D2D] text-white text-center py-3 rounded-md font-manrope font-medium">Appeler</a>
+        <a href="#contact" className="flex-1 border border-[#1F3D2D] text-[#1F3D2D] text-center py-3 rounded-md font-manrope font-medium">Devis</a>
+      </div>
 
       {sectionOrder.map((key) => (SECTIONS[key] ? SECTIONS[key]() : null))}
 
